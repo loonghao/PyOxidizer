@@ -134,12 +134,12 @@ impl<'a> ImportablePythonModule<'a, u8> {
     /// Will return a PyErr if an error occurs resolving source. If there is no source,
     /// returns `Ok(None)`. Otherwise an `Ok(PyString)` cast into a `PyObject` is
     /// returned.
-    pub fn resolve_source<'p>(
+    pub fn resolve_source<'py>(
         &self,
-        py: Python<'p>,
-        decode_source: &'p PyAny,
-        io_module: &PyAny,
-    ) -> PyResult<Option<&'p PyAny>> {
+        py: Python<'py>,
+        decode_source: &Bound<'py, PyAny>,
+        io_module: &Bound<'py, PyAny>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let bytes = if let Some(data) = &self.resource.in_memory_source {
             Some(PyBytes::new(py, data))
         } else if let Some(relative_path) = &self.resource.relative_path_module_source {
@@ -150,7 +150,7 @@ impl<'a> ImportablePythonModule<'a, u8> {
                     PyImportError::type_object(py),
                     (
                         format!("error reading module source from {}: {}", path.display(), e),
-                        self.resource.name.clone().into_py(py),
+                        self.resource.name.to_string(),
                     ),
                 )
             })?;
@@ -177,10 +177,10 @@ impl<'a> ImportablePythonModule<'a, u8> {
     /// The returned `PyObject` will be an instance of `memoryview`.
     pub fn resolve_bytecode(
         &mut self,
-        py: Python,
+        py: Python<'_>,
         optimize_level: BytecodeOptimizationLevel,
-        decode_source: &PyAny,
-        io_module: &PyModule,
+        decode_source: &Bound<'_, PyAny>,
+        io_module: &Bound<'_, PyAny>,
     ) -> PyResult<Option<Py<PyAny>>> {
         if let Some(data) = match optimize_level {
             BytecodeOptimizationLevel::Zero => &self.resource.in_memory_bytecode,
@@ -207,9 +207,8 @@ impl<'a> ImportablePythonModule<'a, u8> {
                 PyErr::from_type(
                     PyImportError::type_object(py),
                     (
-                        format!("error reading bytecode from {}: {}", path.display(), e)
-                            .into_py(py),
-                        self.resource.name.clone().into_py(py),
+                        format!("error reading bytecode from {}: {}", path.display(), e),
+                        self.resource.name.to_string(),
                     ),
                 )
             })?;
@@ -221,7 +220,7 @@ impl<'a> ImportablePythonModule<'a, u8> {
             }
 
             // First 16 bytes of .pyc files are a header.
-            Ok(Some(PyBytes::new(py, &bytecode[16..]).into_py(py)))
+            Ok(Some(PyBytes::new(py, &bytecode[16..]).into_any().unbind()))
         } else if let Some(source) = self.resolve_source(py, decode_source, io_module)? {
             let builtins = py.import("builtins")?;
             let marshal = py.import("marshal")?;
@@ -231,20 +230,20 @@ impl<'a> ImportablePythonModule<'a, u8> {
                 .call((source, self.resource.name.as_ref(), "exec"), None)?;
             let bytecode = marshal.getattr("dumps")?.call((code,), None)?;
 
-            Ok(Some(bytecode.into_py(py)))
+            Ok(Some(bytecode.unbind()))
         } else {
             Ok(None)
         }
     }
 
     /// Resolve the `importlib.machinery.ModuleSpec` for this module.
-    pub fn resolve_module_spec<'p>(
+    pub fn resolve_module_spec<'py>(
         &self,
-        py: Python,
-        module_spec_type: &'p PyAny,
-        loader: &PyAny,
+        py: Python<'py>,
+        module_spec_type: &Bound<'py, PyAny>,
+        loader: &Bound<'py, crate::importer::OxidizedFinder>,
         optimize_level: BytecodeOptimizationLevel,
-    ) -> PyResult<&'p PyAny> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let name = PyString::new(py, &self.resource.name);
 
         let kwargs = PyDict::new(py);
@@ -259,7 +258,7 @@ impl<'a> ImportablePythonModule<'a, u8> {
             kwargs.set_item("origin", origin)?;
         }
 
-        let spec = module_spec_type.call((name, loader), Some(kwargs))?;
+        let spec = module_spec_type.call((name, loader.clone().into_any()), Some(&kwargs))?;
 
         if origin.is_some() {
             spec.setattr("has_location", true)?;
@@ -298,9 +297,9 @@ impl<'a> ImportablePythonModule<'a, u8> {
             // library sets `__path__` to the path to the zip file with the package
             // names `os.path.join()`d to the end. e.g.
             // `/path/to/myapp.zip/mypackage/subpackage`.
-            let mut locations = if let Some(origin_path) = self.origin_path() {
+            let mut locations: Vec<Bound<'py, PyAny>> = if let Some(origin_path) = self.origin_path() {
                 if let Some(parent_path) = origin_path.parent() {
-                    vec![parent_path.into_py(py).into_ref(py)]
+                    vec![parent_path.to_string_lossy().to_string().into_pyobject(py)?.into_any()]
                 } else {
                     vec![]
                 }
@@ -312,7 +311,7 @@ impl<'a> ImportablePythonModule<'a, u8> {
                 let mut path = self.current_exe.to_path_buf();
                 path.extend(self.resource.name.split('.'));
 
-                locations.push(path.into_py(py).into_ref(py));
+                locations.push(path.to_string_lossy().to_string().into_pyobject(py)?.into_any());
             }
 
             spec.setattr("submodule_search_locations", locations)?;
@@ -324,9 +323,9 @@ impl<'a> ImportablePythonModule<'a, u8> {
     /// Resolve the value of a `ModuleSpec` origin.
     ///
     /// The value gets turned into `__file__`
-    pub fn resolve_origin<'p>(&self, py: Python<'p>) -> PyResult<Option<&'p PyAny>> {
+    pub fn resolve_origin<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         Ok(if let Some(path) = self.origin_path() {
-            Some(path.into_py(py).into_ref(py))
+            Some(path.to_string_lossy().to_string().into_pyobject(py)?.into_any())
         } else {
             None
         })
@@ -335,18 +334,18 @@ impl<'a> ImportablePythonModule<'a, u8> {
     /// Resolve the value of a `ModuleSpec` `cached` attribute.
     ///
     /// The value gets turned into `__cached__`.
-    fn resolve_cached<'p>(
+    fn resolve_cached<'py>(
         &self,
-        py: Python<'p>,
+        py: Python<'py>,
         optimize_level: BytecodeOptimizationLevel,
-    ) -> PyResult<Option<&'p PyAny>> {
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let path = match self.flavor {
             ModuleFlavor::SourceBytecode => self.bytecode_path(optimize_level),
             _ => None,
         };
 
         Ok(if let Some(path) = path {
-            Some(path.into_py(py).into_ref(py))
+            Some(path.to_string_lossy().to_string().into_pyobject(py)?.into_any())
         } else {
             None
         })
@@ -526,7 +525,7 @@ impl<'a> PythonResourcesState<'a, u8> {
     /// Load resources from packed data stored in a PyObject.
     ///
     /// The `PyObject` must conform to the buffer protocol.
-    pub fn index_pyobject(&mut self, py: Python, obj: &PyAny) -> PyResult<()> {
+    pub fn index_pyobject(&mut self, py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<()> {
         let buffer = PyBuffer::<u8>::get(obj)?;
 
         let data = unsafe {
@@ -534,7 +533,7 @@ impl<'a> PythonResourcesState<'a, u8> {
         };
 
         self.index_data(data).map_err(PyValueError::new_err)?;
-        self.backing_py_objects.push(obj.to_object(py));
+        self.backing_py_objects.push(obj.clone().unbind());
 
         Ok(())
     }
@@ -741,12 +740,12 @@ impl<'a> PythonResourcesState<'a, u8> {
     /// Err occurs if loading the resource data fails. `Ok(None)` is returned
     /// if the resource does not exist. Otherwise the returned `PyObject`
     /// is a file-like object to read the resource data.
-    pub fn get_package_resource_file<'p>(
+    pub fn get_package_resource_file<'py>(
         &self,
-        py: Python<'p>,
+        py: Python<'py>,
         package: &str,
         resource_name: &str,
-    ) -> PyResult<Option<&'p PyAny>> {
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let entry = match self.resources.get(package) {
             Some(entry) => entry,
             None => return Ok(None),
@@ -770,7 +769,7 @@ impl<'a> PythonResourcesState<'a, u8> {
                 return Ok(Some(
                     io_module
                         .getattr("FileIO")?
-                        .call((path.into_py(py), "r"), None)?,
+                        .call((path.to_string_lossy().to_string(), "r"), None)?,
                 ));
             }
         }
@@ -800,10 +799,10 @@ impl<'a> PythonResourcesState<'a, u8> {
     /// Obtain the resources available in a Python package, as a Python list.
     ///
     /// The names are returned in sorted order.
-    pub fn package_resource_names<'p>(&self, py: Python<'p>, package: &str) -> PyResult<&'p PyAny> {
+    pub fn package_resource_names<'py>(&self, py: Python<'py>, package: &str) -> PyResult<Bound<'py, PyAny>> {
         let entry = match self.resources.get(package) {
             Some(entry) => entry,
-            None => return Ok(PyList::empty(py).into()),
+            None => return Ok(PyList::empty(py).into_any()),
         };
 
         let mut names = if let Some(resources) = &entry.in_memory_package_resources {
@@ -816,12 +815,12 @@ impl<'a> PythonResourcesState<'a, u8> {
 
         names.sort();
 
-        let names = names
+        let names: Vec<Bound<'py, PyAny>> = names
             .iter()
-            .map(|x| x.to_object(py))
-            .collect::<Vec<Py<PyAny>>>();
+            .map(|x| x.into_pyobject(py).unwrap().into_any())
+            .collect();
 
-        Ok(PyList::new(py, &names).into())
+        Ok(PyList::new(py, &names)?.into_any())
     }
 
     /// Whether the given resource name is a directory with resources.
@@ -911,11 +910,11 @@ impl<'a> PythonResourcesState<'a, u8> {
     ///
     /// This method is meant to be an implementation of `ResourceLoader.get_data()` and
     /// should only be used for that purpose.
-    pub fn resolve_resource_data_from_path<'p>(
+    pub fn resolve_resource_data_from_path<'py>(
         &self,
-        py: Python<'p>,
+        py: Python<'py>,
         path: &str,
-    ) -> PyResult<&'p PyAny> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         // Paths prefixed with the current executable path are recognized as
         // in-memory resources. This emulates behavior of zipimporter, which
         // does something similar.
@@ -1014,7 +1013,7 @@ impl<'a> PythonResourcesState<'a, u8> {
                 if check_in_memory {
                     if let Some(resources) = &entry.in_memory_package_resources {
                         if let Some(data) = resources.get(resource_name_ref) {
-                            return Ok(PyBytes::new(py, data).into());
+                            return Ok(PyBytes::new(py, data).into_any());
                         }
                     }
                 }
@@ -1028,7 +1027,7 @@ impl<'a> PythonResourcesState<'a, u8> {
 
                             let fh = io_module
                                 .getattr("FileIO")?
-                                .call((resource_path.into_py(py).into_ref(py), "r"), None)?;
+                                .call((resource_path.to_string_lossy().to_string(), "r"), None)?;
 
                             return fh.call_method0("read");
                         }
@@ -1057,13 +1056,13 @@ impl<'a> PythonResourcesState<'a, u8> {
     ///
     /// `package_filter` defines the target package to return results for. The
     /// empty string denotes top-level packages only.
-    pub fn pkgutil_modules_infos<'p>(
+    pub fn pkgutil_modules_infos<'py>(
         &self,
-        py: Python<'p>,
+        py: Python<'py>,
         package_filter: Option<&str>,
         prefix: Option<String>,
         optimize_level: BytecodeOptimizationLevel,
-    ) -> PyResult<&'p PyList> {
+    ) -> PyResult<Bound<'py, PyList>> {
         let infos: PyResult<Vec<_>> = self
             .resources
             .values()
@@ -1082,16 +1081,16 @@ impl<'a> PythonResourcesState<'a, u8> {
                     name.to_string()
                 };
 
-                let name = name.to_object(py);
-                let is_package = r.is_python_package.to_object(py);
+                let name_obj = name.into_pyobject(py)?.into_any();
+                let is_package_obj = r.is_python_package.into_pyobject(py)?.to_owned().into_any();
 
-                Ok(PyTuple::new(py, &[name, is_package]))
+                PyTuple::new(py, &[name_obj, is_package_obj])
             })
             .collect();
 
         let infos = infos?;
 
-        Ok(PyList::new(py, &infos))
+        Ok(PyList::new(py, &infos)?)
     }
 
     /// Resolve the names of package distributions matching a name filter.
@@ -1230,7 +1229,7 @@ impl<'a> PythonResourcesState<'a, u8> {
     }
 
     /// Convert indexed resources to a [PyList].
-    pub fn resources_as_py_list<'p>(&self, py: Python<'p>) -> PyResult<&'p PyList> {
+    pub fn resources_as_py_list<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let mut resources = self.resources.values().collect::<Vec<_>>();
         resources.sort_by_key(|r| &r.name);
 
@@ -1239,7 +1238,7 @@ impl<'a> PythonResourcesState<'a, u8> {
             .map(|r| resource_to_pyobject(py, r))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(PyList::new(py, objects))
+        PyList::new(py, objects)
     }
 
     /// Serialize resources contained in this data structure.
@@ -1272,7 +1271,7 @@ impl<'a> PythonResourcesState<'a, u8> {
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct OxidizedResource {
     resource: RefCell<Resource<'static, u8>>,
 }
@@ -1392,7 +1391,7 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_source<'p>(&self, py: Python<'p>) -> Option<&'p PyBytes> {
+    fn get_in_memory_source<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_source
@@ -1401,7 +1400,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_source(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_source(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_source =
             pyobject_to_owned_bytes_optional(value)?.map(Cow::Owned);
 
@@ -1409,7 +1408,7 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_bytecode<'p>(&self, py: Python<'p>) -> Option<&'p PyBytes> {
+    fn get_in_memory_bytecode<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_bytecode
@@ -1418,7 +1417,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_bytecode(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_bytecode(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_bytecode =
             pyobject_to_owned_bytes_optional(value)?.map(Cow::Owned);
 
@@ -1426,7 +1425,7 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_bytecode_opt1<'p>(&self, py: Python<'p>) -> Option<&'p PyBytes> {
+    fn get_in_memory_bytecode_opt1<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_bytecode_opt1
@@ -1435,7 +1434,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_bytecode_opt1(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_bytecode_opt1(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_bytecode_opt1 =
             pyobject_to_owned_bytes_optional(value)?.map(Cow::Owned);
 
@@ -1443,7 +1442,7 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_bytecode_opt2<'p>(&self, py: Python<'p>) -> Option<&'p PyBytes> {
+    fn get_in_memory_bytecode_opt2<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_bytecode_opt2
@@ -1452,7 +1451,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_bytecode_opt2(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_bytecode_opt2(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_bytecode_opt2 =
             pyobject_to_owned_bytes_optional(value)?.map(Cow::Owned);
 
@@ -1460,10 +1459,10 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_extension_module_shared_library<'p>(
+    fn get_in_memory_extension_module_shared_library<'py>(
         &self,
-        py: Python<'p>,
-    ) -> Option<&'p PyBytes> {
+        py: Python<'py>,
+    ) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_extension_module_shared_library
@@ -1472,7 +1471,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_extension_module_shared_library(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_extension_module_shared_library(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource
             .borrow_mut()
             .in_memory_extension_module_shared_library =
@@ -1482,10 +1481,10 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_package_resources<'p>(
+    fn get_in_memory_package_resources<'py>(
         &self,
-        py: Python<'p>,
-    ) -> Option<HashMap<String, &'p PyBytes>> {
+        py: Python<'py>,
+    ) -> Option<HashMap<String, Bound<'py, PyBytes>>> {
         self.resource
             .borrow()
             .in_memory_package_resources
@@ -1498,7 +1497,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_package_resources(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_package_resources(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_package_resources =
             pyobject_optional_resources_map_to_owned_bytes(value)?.map(|x| {
                 x.into_iter()
@@ -1510,10 +1509,10 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_distribution_resources<'p>(
+    fn get_in_memory_distribution_resources<'py>(
         &self,
-        py: Python<'p>,
-    ) -> Option<HashMap<String, &'p PyBytes>> {
+        py: Python<'py>,
+    ) -> Option<HashMap<String, Bound<'py, PyBytes>>> {
         self.resource
             .borrow()
             .in_memory_distribution_resources
@@ -1526,7 +1525,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_distribution_resources(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_distribution_resources(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_distribution_resources =
             pyobject_optional_resources_map_to_owned_bytes(value)?.map(|x| {
                 x.into_iter()
@@ -1538,7 +1537,7 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_in_memory_shared_library<'p>(&self, py: Python<'p>) -> Option<&'p PyBytes> {
+    fn get_in_memory_shared_library<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyBytes>> {
         self.resource
             .borrow()
             .in_memory_shared_library
@@ -1547,7 +1546,7 @@ impl OxidizedResource {
     }
 
     #[setter]
-    fn set_in_memory_shared_library(&self, value: &PyAny) -> PyResult<()> {
+    fn set_in_memory_shared_library(&self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().in_memory_shared_library =
             pyobject_to_owned_bytes_optional(value)?.map(Cow::Owned);
 
@@ -1572,19 +1571,19 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_module_source<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_module_source<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_module_source
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
+                || Ok(py.None().into_bound(py)),
                 |x| path_to_pathlib_path(py, x),
             )
     }
 
     #[setter]
-    fn set_relative_path_module_source(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_module_source(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().relative_path_module_source =
             pyobject_to_pathbuf_optional(py, value)?.map(Cow::Owned);
 
@@ -1592,19 +1591,19 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_module_bytecode<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_module_bytecode<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_module_bytecode
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
+                || Ok(py.None().into_bound(py)),
                 |x| path_to_pathlib_path(py, x),
             )
     }
 
     #[setter]
-    fn set_relative_path_module_bytecode(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_module_bytecode(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().relative_path_module_bytecode =
             pyobject_to_pathbuf_optional(py, value)?.map(Cow::Owned);
 
@@ -1612,19 +1611,19 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_module_bytecode_opt1<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_module_bytecode_opt1<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_module_bytecode_opt1
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
+                || Ok(py.None().into_bound(py)),
                 |x| path_to_pathlib_path(py, x),
             )
     }
 
     #[setter]
-    fn set_relative_path_module_bytecode_opt1(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_module_bytecode_opt1(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource
             .borrow_mut()
             .relative_path_module_bytecode_opt1 =
@@ -1634,19 +1633,19 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_module_bytecode_opt2<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_module_bytecode_opt2<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_module_bytecode_opt2
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
+                || Ok(py.None().into_bound(py)),
                 |x| path_to_pathlib_path(py, x),
             )
     }
 
     #[setter]
-    fn set_relative_path_module_bytecode_opt2(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_module_bytecode_opt2(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource
             .borrow_mut()
             .relative_path_module_bytecode_opt2 =
@@ -1656,16 +1655,16 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_extension_module_shared_library<'p>(
+    fn get_relative_path_extension_module_shared_library<'py>(
         &self,
-        py: Python<'p>,
-    ) -> PyResult<&'p PyAny> {
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_extension_module_shared_library
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
+                || Ok(py.None().into_bound(py)),
                 |x| path_to_pathlib_path(py, x),
             )
     }
@@ -1673,8 +1672,8 @@ impl OxidizedResource {
     #[setter]
     fn set_relative_path_extension_module_shared_library(
         &self,
-        py: Python,
-        value: &PyAny,
+        py: Python<'_>,
+        value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         self.resource
             .borrow_mut()
@@ -1685,27 +1684,27 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_package_resources<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_package_resources<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_package_resources
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
-                |x| -> PyResult<&PyAny> {
+                || Ok(py.None().into_bound(py)),
+                |x| -> PyResult<Bound<'py, PyAny>> {
                     let res = PyDict::new(py);
 
                     for (k, v) in x.iter() {
                         res.set_item(k, path_to_pathlib_path(py, v)?)?;
                     }
 
-                    Ok(res)
+                    Ok(res.into_any())
                 },
             )
     }
 
     #[setter]
-    fn set_relative_path_package_resources(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_package_resources(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource.borrow_mut().relative_path_package_resources =
             pyobject_optional_resources_map_to_pathbuf(py, value)?.map(|x| {
                 x.into_iter()
@@ -1717,27 +1716,27 @@ impl OxidizedResource {
     }
 
     #[getter]
-    fn get_relative_path_distribution_resources<'p>(&self, py: Python<'p>) -> PyResult<&'p PyAny> {
+    fn get_relative_path_distribution_resources<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.resource
             .borrow()
             .relative_path_distribution_resources
             .as_ref()
             .map_or_else(
-                || Ok(py.None().into_ref(py)),
-                |x| -> PyResult<&PyAny> {
+                || Ok(py.None().into_bound(py)),
+                |x| -> PyResult<Bound<'py, PyAny>> {
                     let res = PyDict::new(py);
 
                     for (k, v) in x.iter() {
                         res.set_item(k, path_to_pathlib_path(py, v)?)?;
                     }
 
-                    Ok(res.into())
+                    Ok(res.into_any())
                 },
             )
     }
 
     #[setter]
-    fn set_relative_path_distribution_resources(&self, py: Python, value: &PyAny) -> PyResult<()> {
+    fn set_relative_path_distribution_resources(&self, py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.resource
             .borrow_mut()
             .relative_path_distribution_resources =
@@ -1752,11 +1751,11 @@ impl OxidizedResource {
 }
 
 /// Convert a Resource to an OxidizedResource.
-pub(crate) fn resource_to_pyobject<'p>(
-    py: Python<'p>,
+pub(crate) fn resource_to_pyobject<'py>(
+    py: Python<'py>,
     resource: &Resource<u8>,
-) -> PyResult<&'p PyCell<OxidizedResource>> {
-    PyCell::new(
+) -> PyResult<Bound<'py, OxidizedResource>> {
+    Bound::new(
         py,
         OxidizedResource {
             resource: RefCell::new(resource.to_owned()),

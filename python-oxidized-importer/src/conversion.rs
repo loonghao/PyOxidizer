@@ -16,8 +16,8 @@ use {
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 /// Convert a Rust Path to a pathlib.Path.
-pub fn path_to_pathlib_path<'p>(py: Python<'p>, path: &Path) -> PyResult<&'p PyAny> {
-    let py_str = path.into_py(py).into_ref(py);
+pub fn path_to_pathlib_path<'py>(py: Python<'py>, path: &Path) -> PyResult<Bound<'py, PyAny>> {
+    let py_str = path.to_string_lossy().to_string();
 
     let pathlib = py.import("pathlib")?;
 
@@ -25,7 +25,7 @@ pub fn path_to_pathlib_path<'p>(py: Python<'p>, path: &Path) -> PyResult<&'p PyA
 }
 
 #[cfg(unix)]
-pub fn pyobject_to_pathbuf(py: Python, value: &PyAny) -> PyResult<PathBuf> {
+pub fn pyobject_to_pathbuf(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<PathBuf> {
     let os = py.import("os")?;
 
     let encoded = os
@@ -38,7 +38,7 @@ pub fn pyobject_to_pathbuf(py: Python, value: &PyAny) -> PyResult<PathBuf> {
 }
 
 #[cfg(windows)]
-pub fn pyobject_to_pathbuf(py: Python, value: &PyAny) -> PyResult<PathBuf> {
+pub fn pyobject_to_pathbuf(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<PathBuf> {
     let os = py.import("os")?;
 
     // This conversion is a bit wonky. First, the PyObject could be of various
@@ -60,7 +60,7 @@ pub fn pyobject_to_pathbuf(py: Python, value: &PyAny) -> PyResult<PathBuf> {
     Ok(PathBuf::from(rust_normalized))
 }
 
-pub fn pyobject_to_pathbuf_optional(py: Python, value: &PyAny) -> PyResult<Option<PathBuf>> {
+pub fn pyobject_to_pathbuf_optional(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Option<PathBuf>> {
     if value.is_none() {
         Ok(None)
     } else {
@@ -69,7 +69,7 @@ pub fn pyobject_to_pathbuf_optional(py: Python, value: &PyAny) -> PyResult<Optio
 }
 
 /// Attempt to convert a PyObject to an owned Vec<u8>.
-pub fn pyobject_to_owned_bytes(value: &PyAny) -> PyResult<Vec<u8>> {
+pub fn pyobject_to_owned_bytes(value: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
     let buffer = PyBuffer::<u8>::get(value)?;
 
     let data = unsafe {
@@ -82,7 +82,7 @@ pub fn pyobject_to_owned_bytes(value: &PyAny) -> PyResult<Vec<u8>> {
 /// Attempt to convert a PyObject to owned Vec<u8>.
 ///
 /// Returns Ok(None) if PyObject is None.
-pub fn pyobject_to_owned_bytes_optional(value: &PyAny) -> PyResult<Option<Vec<u8>>> {
+pub fn pyobject_to_owned_bytes_optional(value: &Bound<'_, PyAny>) -> PyResult<Option<Vec<u8>>> {
     if value.is_none() {
         Ok(None)
     } else {
@@ -91,7 +91,7 @@ pub fn pyobject_to_owned_bytes_optional(value: &PyAny) -> PyResult<Option<Vec<u8
 }
 
 pub fn pyobject_optional_resources_map_to_owned_bytes(
-    value: &PyAny,
+    value: &Bound<'_, PyAny>,
 ) -> PyResult<Option<HashMap<String, Vec<u8>>>> {
     if value.is_none() {
         Ok(None)
@@ -100,7 +100,7 @@ pub fn pyobject_optional_resources_map_to_owned_bytes(
         let mut res = HashMap::with_capacity(source.len());
 
         for (k, v) in source.iter() {
-            res.insert(k.extract::<String>()?, pyobject_to_owned_bytes(v)?);
+            res.insert(k.extract::<String>()?, pyobject_to_owned_bytes(&v)?);
         }
 
         Ok(Some(res))
@@ -108,8 +108,8 @@ pub fn pyobject_optional_resources_map_to_owned_bytes(
 }
 
 pub fn pyobject_optional_resources_map_to_pathbuf(
-    py: Python,
-    value: &PyAny,
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
 ) -> PyResult<Option<HashMap<String, PathBuf>>> {
     if value.is_none() {
         Ok(None)
@@ -118,7 +118,7 @@ pub fn pyobject_optional_resources_map_to_pathbuf(
         let mut res = HashMap::with_capacity(source.len());
 
         for (k, v) in source.iter() {
-            res.insert(k.extract::<String>()?, pyobject_to_pathbuf(py, v)?);
+            res.insert(k.extract::<String>()?, pyobject_to_pathbuf(py, &v)?);
         }
 
         Ok(Some(res))

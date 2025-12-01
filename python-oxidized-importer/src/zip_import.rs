@@ -13,7 +13,7 @@ use {
         ffi as pyffi,
         prelude::*,
         types::{PyBytes, PyDict, PyType},
-        PyNativeType, PyTraverseError, PyVisit,
+        PyTraverseError, PyVisit,
     },
     std::{
         collections::HashMap,
@@ -171,7 +171,7 @@ impl SeekableReader for BufReader<std::fs::File> {}
 /// * ResourceReader interface not implemented.
 /// * ResourceLoader interface not implemented.
 /// * Bytecode isn't validated.
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub struct OxidizedZipFinder {
     /// A PyObject backing storage of data.
     ///
@@ -197,7 +197,7 @@ pub struct OxidizedZipFinder {
     module_spec_type: Py<PyAny>,
 
     /// `_io` Python module.
-    io_module: Py<PyModule>,
+    io_module: Py<PyAny>,
 
     /// `marshal.loads` function.
     marshal_loads: Py<PyAny>,
@@ -212,7 +212,7 @@ pub struct OxidizedZipFinder {
 impl OxidizedZipFinder {
     /// Construct a new instance from zip data.
     pub fn new_from_data(
-        py: Python,
+        py: Python<'_>,
         zip_path: PathBuf,
         data: Vec<u8>,
         prefix: Option<&Path>,
@@ -227,9 +227,9 @@ impl OxidizedZipFinder {
 
     /// Construct a new instance from a PyObject conforming to the buffer protocol.
     pub fn new_from_pyobject(
-        py: Python,
+        py: Python<'_>,
         zip_path: PathBuf,
-        source: &PyAny,
+        source: &Bound<'_, PyAny>,
         prefix: Option<&Path>,
     ) -> PyResult<Self> {
         let buffer = PyBuffer::<u8>::get(source)?;
@@ -243,14 +243,14 @@ impl OxidizedZipFinder {
         let index = ZipIndex::new(reader, prefix)
             .map_err(|e| PyValueError::new_err(format!("error indexing zip data: {}", e)))?;
 
-        Self::new_internal(py, index, zip_path, Some(source.into_py(py)))
+        Self::new_internal(py, index, zip_path, Some(source.clone().unbind()))
     }
 
     /// Construct a new instance from a reader.
     ///
     /// The full content of the reader will be read to an in-memory buffer.
     pub fn new_from_reader(
-        py: Python,
+        py: Python<'_>,
         zip_path: PathBuf,
         reader: Box<dyn SeekableReader>,
 
@@ -263,19 +263,19 @@ impl OxidizedZipFinder {
     }
 
     fn new_internal(
-        py: Python,
+        py: Python<'_>,
         index: ZipIndex<Box<dyn SeekableReader>>,
         zip_path: PathBuf,
         backing_pyobject: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         let importlib_bootstrap = py.import("_frozen_importlib")?;
-        let module_spec_type = importlib_bootstrap.getattr("ModuleSpec")?.into_py(py);
-        let io_module = py.import("_io")?.into_py(py);
+        let module_spec_type = importlib_bootstrap.getattr("ModuleSpec")?.unbind();
+        let io_module = py.import("_io")?.into_any().unbind();
         let marshal_module = py.import("marshal")?;
-        let marshal_loads = marshal_module.getattr("loads")?.into_py(py);
+        let marshal_loads = marshal_module.getattr("loads")?.unbind();
         let builtins_module = py.import("builtins")?;
-        let builtins_compile = builtins_module.getattr("compile")?.into_py(py);
-        let builtins_exec = builtins_module.getattr("exec")?.into_py(py);
+        let builtins_compile = builtins_module.getattr("compile")?.unbind();
+        let builtins_exec = builtins_module.getattr("exec")?.unbind();
 
         Ok(Self {
             backing_pyobject,
@@ -290,7 +290,7 @@ impl OxidizedZipFinder {
     }
 
     fn resolve_python_module(
-        slf: &mut PyRefMut<Self>,
+        slf: &mut PyRefMut<'_, Self>,
         full_name: &str,
     ) -> PyResult<ZipPythonModule> {
         if let Some(module) = slf.index.find_python_module(full_name) {
@@ -322,7 +322,7 @@ impl OxidizedZipFinder {
 
     #[classmethod]
     #[allow(unused)]
-    fn from_path(cls: &PyType, py: Python, path: &PyAny) -> PyResult<Self> {
+    fn from_path(cls: &Bound<'_, PyType>, py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<Self> {
         let path = pyobject_to_pathbuf(py, path)?;
 
         let f = Box::new(BufReader::new(std::fs::File::open(&path).map_err(|e| {
@@ -336,19 +336,19 @@ impl OxidizedZipFinder {
     #[pyo3(signature=(source, path=None))]
     #[allow(unused)]
     fn from_zip_data(
-        cls: &PyType,
-        py: Python,
-        source: &PyAny,
-        path: Option<&PyAny>,
+        cls: &Bound<'_, PyType>,
+        py: Python<'_>,
+        source: &Bound<'_, PyAny>,
+        path: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
         let path = if let Some(o) = path {
-            o
+            o.clone()
         } else {
             let sys_module = py.import("sys")?;
             sys_module.getattr("executable")?
         };
 
-        let zip_path = pyobject_to_pathbuf(py, path)?;
+        let zip_path = pyobject_to_pathbuf(py, &path)?;
 
         Self::new_from_pyobject(py, zip_path, source, None)
     }
@@ -356,21 +356,21 @@ impl OxidizedZipFinder {
     // Start of importlib.abc.MetaPathFinder interface.
     #[pyo3(signature=(fullname, path, target=None))]
     #[allow(unused)]
-    fn find_spec<'p>(
-        slf: &'p PyCell<Self>,
+    fn find_spec<'py>(
+        slf: &Bound<'py, Self>,
         fullname: String,
-        path: &PyAny,
-        target: Option<&PyAny>,
-    ) -> PyResult<&'p PyAny> {
+        path: &Bound<'_, PyAny>,
+        target: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         // TODO support namespace packages for parity with zipimporter.
 
         let py = slf.py();
-        let mut importer = slf.try_borrow_mut()?;
+        let mut importer = slf.borrow_mut();
 
         let module = if let Some(module) = importer.index.find_python_module(&fullname) {
             module
         } else {
-            return Ok(py.None().into_ref(py));
+            return Ok(py.None().into_bound(py));
         };
 
         let module_spec_type = importer.module_spec_type.clone_ref(py);
@@ -390,11 +390,14 @@ impl OxidizedZipFinder {
             origin = origin.join(path);
         }
 
-        kwargs.set_item("origin", (&origin).into_py(py))?;
+        kwargs.set_item("origin", origin.to_string_lossy().to_string())?;
+
+        // Drop the borrow before calling Python code
+        drop(importer);
 
         let spec = module_spec_type
-            .call(py, (&fullname, slf), Some(kwargs))?
-            .into_ref(py);
+            .call(py, (&fullname, slf.clone().into_any()), Some(&kwargs))?
+            .into_bound(py);
 
         spec.setattr("has_location", true)?;
         spec.setattr("cached", py.None())?;
@@ -408,7 +411,7 @@ impl OxidizedZipFinder {
                 )
             })?;
 
-            let locations = vec![parent.into_py(py)];
+            let locations = vec![parent.to_string_lossy().to_string()];
             spec.setattr("submodule_search_locations", locations)?;
         }
 
@@ -417,18 +420,19 @@ impl OxidizedZipFinder {
 
     #[allow(unused)]
     #[pyo3(signature=(fullname, path=None))]
-    fn find_module<'p>(
-        slf: &'p PyCell<Self>,
+    fn find_module<'py>(
+        slf: &Bound<'py, Self>,
         fullname: String,
-        path: Option<&PyAny>,
-    ) -> PyResult<&'p PyAny> {
+        path: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         // TODO support namespace packages for parity with zipimporter.
 
+        let py = slf.py();
         let find_spec = slf.getattr("find_spec")?;
         let spec = find_spec.call((fullname, path), None)?;
 
         if spec.is_none() {
-            Ok(slf.py().None().into_ref(slf.py()))
+            Ok(py.None().into_bound(py))
         } else {
             spec.getattr("loader")
         }
@@ -443,12 +447,12 @@ impl OxidizedZipFinder {
     // Start of importlib.abc.Loader interface.
 
     #[allow(unused)]
-    fn create_module(&self, py: Python, spec: &PyAny) -> PyResult<Py<PyAny>> {
+    fn create_module(&self, py: Python<'_>, spec: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         // Use default module creation semantics.
         Ok(py.None())
     }
 
-    fn exec_module(slf: &PyCell<Self>, module: &PyAny) -> PyResult<Py<PyAny>> {
+    fn exec_module(slf: &Bound<'_, Self>, module: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = slf.py();
 
         let name = module.getattr("__name__")?;
@@ -470,7 +474,7 @@ impl OxidizedZipFinder {
 
     // Start of importlib.abc.InspectLoader interface.
 
-    fn get_code(slf: &PyCell<Self>, fullname: &str) -> PyResult<Py<PyAny>> {
+    fn get_code(slf: &Bound<'_, Self>, fullname: &str) -> PyResult<Py<PyAny>> {
         let py = slf.py();
         let mut importer = slf.try_borrow_mut()?;
 
@@ -528,13 +532,13 @@ impl OxidizedZipFinder {
             let lf = PyBytes::new(py, b"\n");
             let cr = PyBytes::new(py, b"\r");
 
-            let source_bytes = source_bytes.call_method("replace", (crlf, lf), None)?;
-            let source_bytes = source_bytes.call_method("replace", (cr, lf), None)?;
+            let source_bytes = source_bytes.call_method("replace", (&crlf, &lf), None)?;
+            let source_bytes = source_bytes.call_method("replace", (&cr, &lf), None)?;
 
             let kwargs = PyDict::new(py);
             kwargs.set_item("dont_inherit", true)?;
 
-            builtins_compile.call(py, (source_bytes, path, "exec"), Some(kwargs))
+            builtins_compile.call(py, (source_bytes, path, "exec"), Some(&kwargs))
         } else {
             Err(PyImportError::new_err((
                 "unable to resolve bytecode for module",
@@ -543,7 +547,7 @@ impl OxidizedZipFinder {
         }
     }
 
-    fn get_source(slf: &PyCell<Self>, fullname: &str) -> PyResult<Py<PyAny>> {
+    fn get_source(slf: &Bound<'_, Self>, fullname: &str) -> PyResult<Py<PyAny>> {
         let py = slf.py();
         let mut importer = slf.try_borrow_mut()?;
 
@@ -565,12 +569,12 @@ impl OxidizedZipFinder {
 
         let source_bytes = PyBytes::new(py, &source_bytes);
 
-        let source = decode_source(py, importer.io_module.as_ref(py), source_bytes)?;
+        let source = decode_source(py, &importer.io_module.bind(py), &source_bytes)?;
 
-        Ok(source.into_py(py))
+        Ok(source.unbind())
     }
 
-    fn is_package(slf: &PyCell<Self>, fullname: &str) -> PyResult<bool> {
+    fn is_package(slf: &Bound<'_, Self>, fullname: &str) -> PyResult<bool> {
         let mut importer = slf.try_borrow_mut()?;
 
         let module = Self::resolve_python_module(&mut importer, fullname)?;

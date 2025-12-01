@@ -19,7 +19,6 @@ use {
         ffi as pyffi,
         prelude::*,
         types::{PyBytes, PyList, PyTuple},
-        AsPyPointer,
     },
     python_packaging::{
         bytecode::BytecodeCompiler,
@@ -39,13 +38,13 @@ pub struct PyTempDir {
 }
 
 impl PyTempDir {
-    pub fn new(py: Python) -> PyResult<Self> {
+    pub fn new(py: Python<'_>) -> PyResult<Self> {
         let temp_dir = py
             .import("tempfile")?
             .getattr("TemporaryDirectory")?
             .call0()?;
-        let cleanup = temp_dir.getattr("cleanup")?.into_py(py);
-        let path = pyobject_to_pathbuf(py, temp_dir.getattr("name")?)?;
+        let cleanup = temp_dir.getattr("cleanup")?.unbind();
+        let path = pyobject_to_pathbuf(py, &temp_dir.getattr("name")?)?;
 
         Ok(Self { cleanup, path })
     }
@@ -59,14 +58,14 @@ impl Drop for PyTempDir {
     fn drop(&mut self) {
         Python::with_gil(|py| {
             if self.cleanup.call0(py).is_err() {
-                let cleanup = self.cleanup.as_ptr();
+                let cleanup = self.cleanup.bind(py).as_ptr();
                 unsafe { pyffi::PyErr_WriteUnraisable(cleanup) }
             }
         });
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct OxidizedResourceCollector {
     collector: RefCell<PythonResourceCollector>,
 }
@@ -94,26 +93,26 @@ impl OxidizedResourceCollector {
     }
 
     #[getter]
-    fn allowed_locations<'p>(&self, py: Python<'p>) -> PyResult<&'p PyList> {
+    fn allowed_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let values = self
             .collector
             .borrow()
             .allowed_locations()
             .iter()
-            .map(|l| l.to_string().into_py(py))
-            .collect::<Vec<Py<PyAny>>>();
+            .map(|l| l.to_string())
+            .collect::<Vec<String>>();
 
-        Ok(PyList::new(py, &values))
+        PyList::new(py, &values)
     }
 
-    fn add_in_memory(&self, resource: &PyAny) -> PyResult<()> {
+    fn add_in_memory(&self, resource: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut collector = self.collector.borrow_mut();
         let typ = resource.get_type();
         let repr = resource.repr()?;
 
         match typ.name()?.to_str()? {
             "PythonExtensionModule" => {
-                let module_cell = resource.downcast::<PyCell<PythonExtensionModule>>()?;
+                let module_cell = resource.downcast::<PythonExtensionModule>()?;
                 let module = module_cell.borrow();
                 let resource = module.get_resource();
 
@@ -131,7 +130,7 @@ impl OxidizedResourceCollector {
                 }
             }
             "PythonModuleBytecode" => {
-                let module = resource.downcast::<PyCell<PythonModuleBytecode>>()?;
+                let module = resource.downcast::<PythonModuleBytecode>()?;
                 collector
                     .add_python_module_bytecode(
                         &module.borrow().get_resource(),
@@ -143,7 +142,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonModuleSource" => {
-                let module = resource.downcast::<PyCell<PythonModuleSource>>()?;
+                let module = resource.downcast::<PythonModuleSource>()?;
                 collector
                     .add_python_module_source(
                         &module.borrow().get_resource(),
@@ -155,7 +154,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonPackageResource" => {
-                let resource = resource.downcast::<PyCell<PythonPackageResource>>()?;
+                let resource = resource.downcast::<PythonPackageResource>()?;
                 collector
                     .add_python_package_resource(
                         &resource.borrow().get_resource(),
@@ -167,7 +166,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonPackageDistributionResource" => {
-                let resource = resource.downcast::<PyCell<PythonPackageDistributionResource>>()?;
+                let resource = resource.downcast::<PythonPackageDistributionResource>()?;
                 collector
                     .add_python_package_distribution_resource(
                         &resource.borrow().get_resource(),
@@ -185,14 +184,14 @@ impl OxidizedResourceCollector {
         }
     }
 
-    fn add_filesystem_relative(&self, prefix: String, resource: &PyAny) -> PyResult<()> {
+    fn add_filesystem_relative(&self, prefix: String, resource: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut collector = self.collector.borrow_mut();
 
         let repr = resource.repr()?;
 
         match resource.get_type().name()?.to_str()? {
             "PythonExtensionModule" => {
-                let module_cell = resource.downcast::<PyCell<PythonExtensionModule>>()?;
+                let module_cell = resource.downcast::<PythonExtensionModule>()?;
                 let module = module_cell.borrow();
                 let resource = module.get_resource();
 
@@ -207,7 +206,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonModuleBytecode" => {
-                let module = resource.downcast::<PyCell<PythonModuleBytecode>>()?;
+                let module = resource.downcast::<PythonModuleBytecode>()?;
 
                 collector
                     .add_python_module_bytecode(
@@ -220,7 +219,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonModuleSource" => {
-                let module = resource.downcast::<PyCell<PythonModuleSource>>()?;
+                let module = resource.downcast::<PythonModuleSource>()?;
 
                 collector
                     .add_python_module_source(
@@ -233,7 +232,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonPackageResource" => {
-                let resource = resource.downcast::<PyCell<PythonPackageResource>>()?;
+                let resource = resource.downcast::<PythonPackageResource>()?;
 
                 collector
                     .add_python_package_resource(
@@ -246,7 +245,7 @@ impl OxidizedResourceCollector {
                 Ok(())
             }
             "PythonPackageDistributionResource" => {
-                let resource = resource.downcast::<PyCell<PythonPackageDistributionResource>>()?;
+                let resource = resource.downcast::<PythonPackageDistributionResource>()?;
 
                 collector
                     .add_python_package_distribution_resource(
@@ -266,15 +265,15 @@ impl OxidizedResourceCollector {
     }
 
     #[pyo3(signature=(python_exe=None))]
-    fn oxidize<'p>(&self, py: Python<'p>, python_exe: Option<&PyAny>) -> PyResult<&'p PyTuple> {
+    fn oxidize<'py>(&self, py: Python<'py>, python_exe: Option<&Bound<'_, PyAny>>) -> PyResult<Bound<'py, PyTuple>> {
         let python_exe = match python_exe {
-            Some(p) => p,
+            Some(p) => p.clone(),
             None => {
                 let sys_module = py.import("sys")?;
                 sys_module.getattr("executable")?
             }
         };
-        let python_exe = pyobject_to_pathbuf(py, python_exe)?;
+        let python_exe = pyobject_to_pathbuf(py, &python_exe)?;
         let temp_dir = PyTempDir::new(py)?;
         let collector = self.collector.borrow();
 
@@ -293,7 +292,7 @@ impl OxidizedResourceCollector {
             resources.push(resource_to_pyobject(py, resource)?);
         }
 
-        let mut file_installs = Vec::new();
+        let mut file_installs: Vec<Bound<'py, PyAny>> = Vec::new();
 
         for (path, location, executable) in &prepared.extra_files {
             let path = path_to_pathlib_path(py, path)?;
@@ -301,14 +300,18 @@ impl OxidizedResourceCollector {
                 .resolve_content()
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             let data = PyBytes::new(py, &data);
-            let executable = executable.to_object(py);
+            let executable = executable.into_pyobject(py)?.to_owned().into_any();
 
-            file_installs.push((path, data, executable).to_object(py));
+            let tuple = PyTuple::new(py, &[path, data.into_any(), executable])?;
+            file_installs.push(tuple.into_any());
         }
 
-        Ok(PyTuple::new(
+        let resources_list = PyList::new(py, &resources)?;
+        let file_installs_list = PyList::new(py, &file_installs)?;
+
+        PyTuple::new(
             py,
-            &[resources.to_object(py), file_installs.to_object(py)],
-        ))
+            &[resources_list.into_any(), file_installs_list.into_any()],
+        )
     }
 }

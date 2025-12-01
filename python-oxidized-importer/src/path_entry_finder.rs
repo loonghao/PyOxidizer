@@ -53,9 +53,9 @@ impl OxidizedPathEntryFinder {
     #[pyo3(signature=(fullname, target=None))]
     fn find_spec(
         &self,
-        py: Python,
+        py: Python<'_>,
         fullname: &str,
-        target: Option<&PyModule>,
+        target: Option<&Bound<'_, PyModule>>,
     ) -> PyResult<Py<PyAny>> {
         if !name_at_package_hierarchy(fullname, self.target_package.as_deref()) {
             return Ok(py.None());
@@ -66,19 +66,19 @@ impl OxidizedPathEntryFinder {
             "find_spec",
             (
                 fullname,
-                PyList::new(py, &[self.source_path.clone_ref(py)]),
+                PyList::new(py, &[self.source_path.clone_ref(py)])?,
                 target,
             ),
             None,
         )
     }
 
-    fn invalidate_caches(&self, py: Python) -> PyResult<Py<PyAny>> {
+    fn invalidate_caches(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.finder.call_method0(py, "invalidate_caches")
     }
 
     #[pyo3(signature=(prefix=""))]
-    fn iter_modules<'p>(&self, py: Python<'p>, prefix: &str) -> PyResult<&'p PyList> {
+    fn iter_modules<'py>(&self, py: Python<'py>, prefix: &str) -> PyResult<Bound<'py, PyList>> {
         let finder = self.finder.borrow(py);
 
         finder.state.get_resources_state().pkgutil_modules_infos(
