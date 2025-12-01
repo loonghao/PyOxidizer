@@ -368,6 +368,8 @@ impl<'a> EmbeddedPythonContext<'a> {
                 .iter()
                 .map(|la| la.to_cargo_annotation())
                 .collect::<Vec<_>>(),
+            // macOS Python3.framework requires special rpath handling
+            python_framework_prefix: None,
         })
     }
 

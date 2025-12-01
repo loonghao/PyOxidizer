@@ -4315,7 +4315,7 @@ dependencies = [
  "once_cell",
  "pathdiff",
  "pyo3",
- "pyo3-build-config 0.27.2",
+ "pyo3-build-config",
  "python-oxidized-importer",
  "python-packaging",
  "python-packed-resources",
@@ -4352,20 +4352,10 @@ dependencies = [
  "memoffset",
  "once_cell",
  "portable-atomic",
- "pyo3-build-config 0.27.2",
+ "pyo3-build-config",
  "pyo3-ffi",
  "pyo3-macros",
  "unindent",
-]
-
-[[package]]
-name = "pyo3-build-config"
-version = "0.22.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b14b5775b5ff446dd1056212d778012cbe8a0fbffd368029fd9e25b514479c38"
-dependencies = [
- "once_cell",
- "target-lexicon 0.12.16",
 ]
 
 [[package]]
@@ -4384,7 +4374,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c85c9cbfaddf651b1221594209aed57e9e5cff63c4d11d1feead529b872a089"
 dependencies = [
  "libc",
- "pyo3-build-config 0.27.2",
+ "pyo3-build-config",
 ]
 
 [[package]]
@@ -4407,7 +4397,7 @@ checksum = "03b51720d314836e53327f5871d4c0cfb4fb37cc2c4a11cc71907a86342c40f9"
 dependencies = [
  "heck",
  "proc-macro2",
- "pyo3-build-config 0.27.2",
+ "pyo3-build-config",
  "quote",
  "syn 2.0.87",
 ]
@@ -4444,7 +4434,7 @@ dependencies = [
  "once_cell",
  "path-dedot",
  "predicates",
- "pyo3-build-config 0.22.6",
+ "pyo3-build-config",
  "python-packaging",
  "python-packed-resources",
  "remove_dir_all",
@@ -4501,7 +4491,7 @@ dependencies = [
  "memory-module-sys",
  "once_cell",
  "pyo3",
- "pyo3-build-config 0.27.2",
+ "pyo3-build-config",
  "python-packaging",
  "python-packed-resources",
  "simple-file-manifest",
