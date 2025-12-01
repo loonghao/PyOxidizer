@@ -9,12 +9,40 @@ This module defines a Python meta path importer and associated functionality
 for importing Python modules from memory.
 */
 
-#[cfg(windows)]
+// Windows-specific imports for in-memory extension module loading
+// Only available for Python < 3.11 due to private API dependencies
+#[cfg(all(windows, not(Py_3_11)))]
 use {
     crate::memory_dll::{free_library_memory, get_proc_address_memory, load_library_memory},
     pyo3::exceptions::PySystemError,
     std::ffi::{c_void, CString},
 };
+
+// Private FFI definitions removed from PyO3 0.20+
+// These are internal CPython APIs needed for extension module loading on Windows
+// Note: These APIs are only available in Python < 3.11. In Python 3.11+, these
+// private APIs were removed or made internal, so in-memory extension module
+// loading is not supported on Windows for Python 3.11+.
+#[cfg(all(windows, not(Py_3_11)))]
+mod private_ffi {
+    use pyo3::ffi::PyObject;
+    use std::os::raw::c_char;
+
+    extern "C" {
+        pub static mut _Py_PackageContext: *const c_char;
+        pub fn _PyImport_FindExtensionObject(
+            name: *mut PyObject,
+            filename: *mut PyObject,
+        ) -> *mut PyObject;
+        pub fn _PyImport_FixupExtensionObject(
+            module: *mut PyObject,
+            name: *mut PyObject,
+            filename: *mut PyObject,
+            modules: *mut PyObject,
+        ) -> std::os::raw::c_int;
+    }
+}
+
 use {
     crate::{
         conversion::pyobject_to_pathbuf,
@@ -38,7 +66,8 @@ use {
     std::sync::Arc,
 };
 
-#[cfg(windows)]
+// py_init_fn is only needed for Python < 3.11 on Windows
+#[cfg(all(windows, not(Py_3_11)))]
 #[allow(non_camel_case_types)]
 type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 
@@ -57,7 +86,11 @@ type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 /// `_PyImport_LoadDynamicModuleWithSpec()` is more interesting. It takes a
 /// `FILE*` for the extension location, so we can't call it. So we need to
 /// reimplement it. Documentation of that is inline.
-#[cfg(windows)]
+///
+/// Note: This implementation uses private CPython APIs that are only available
+/// in Python < 3.11. For Python 3.11+, in-memory extension module loading is
+/// not supported on Windows.
+#[cfg(all(windows, not(Py_3_11)))]
 fn extension_module_shared_library_create_module(
     resources_state: &PythonResourcesState<u8>,
     py: Python,
@@ -70,7 +103,7 @@ fn extension_module_shared_library_create_module(
     let origin = PyString::new(py, "memory");
 
     let existing_module =
-        unsafe { pyffi::_PyImport_FindExtensionObject(name_py.as_ptr(), origin.as_ptr()) };
+        unsafe { private_ffi::_PyImport_FindExtensionObject(name_py.as_ptr(), origin.as_ptr()) };
 
     // We found an existing module object. Return it.
     if !existing_module.is_null() {
@@ -105,6 +138,25 @@ fn extension_module_shared_library_create_module(
     })
 }
 
+/// In-memory extension module loading is not supported on Windows for Python 3.11+
+/// because the required private CPython APIs (_PyImport_FindExtensionObject,
+/// _Py_PackageContext, _PyImport_FixupExtensionObject) are no longer exported.
+#[cfg(all(windows, Py_3_11))]
+fn extension_module_shared_library_create_module(
+    _resources_state: &PythonResourcesState<u8>,
+    _py: Python,
+    _sys_modules: &PyAny,
+    _spec: &PyAny,
+    _name_py: &PyAny,
+    name: &str,
+    _library_data: &[u8],
+) -> PyResult<Py<PyAny>> {
+    Err(PyImportError::new_err(format!(
+        "in-memory extension module loading is not supported on Windows for Python 3.11+: {}",
+        name
+    )))
+}
+
 #[cfg(unix)]
 fn extension_module_shared_library_create_module(
     _resources_state: &PythonResourcesState<u8>,
@@ -119,7 +171,8 @@ fn extension_module_shared_library_create_module(
 }
 
 /// Reimplementation of `_PyImport_LoadDynamicModuleWithSpec()`.
-#[cfg(windows)]
+/// Only available for Python < 3.11 due to private API dependencies.
+#[cfg(all(windows, not(Py_3_11)))]
 fn load_dynamic_library(
     py: Python,
     sys_modules: &PyAny,
@@ -153,10 +206,10 @@ fn load_dynamic_library(
 
     // Package context is needed for single-phase init.
     let py_module = unsafe {
-        let old_context = pyffi::_Py_PackageContext;
-        pyffi::_Py_PackageContext = name_cstring.as_ptr();
+        let old_context = private_ffi::_Py_PackageContext;
+        private_ffi::_Py_PackageContext = name_cstring.as_ptr();
         let py_module = init_fn();
-        pyffi::_Py_PackageContext = old_context;
+        private_ffi::_Py_PackageContext = old_context;
         py_module
     };
 
@@ -226,7 +279,7 @@ fn load_dynamic_library(
     // If we wanted to assign __file__ we would do it here.
 
     let fixup_result = unsafe {
-        pyffi::_PyImport_FixupExtensionObject(
+        private_ffi::_PyImport_FixupExtensionObject(
             py_module.as_ptr(),
             name_py.as_ptr(),
             name_py.as_ptr(),
@@ -332,9 +385,12 @@ impl ImporterState {
             unsafe { PyDict::from_borrowed_ptr_or_err(py, pyffi::PyEval_GetBuiltins()) }?;
 
         let exec_fn = match builtins_module.get_item("exec") {
-            Some(v) => v,
-            None => {
+            Ok(Some(v)) => v,
+            Ok(None) => {
                 return Err(PyValueError::new_err("could not obtain __builtins__.exec"));
+            }
+            Err(e) => {
+                return Err(e);
             }
         }
         .into_py(py);
