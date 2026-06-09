@@ -34,6 +34,21 @@ jobs:
             build: 'cp310-manylinux_i686'
           - arch: 'x86_64'
             build: 'cp310-manylinux_x86_64'
+
+          - arch: 'aarch64'
+            build: 'cp311-manylinux_aarch64'
+          - arch: 'x86_64'
+            build: 'cp311-manylinux_x86_64'
+
+          - arch: 'aarch64'
+            build: 'cp312-manylinux_aarch64'
+          - arch: 'x86_64'
+            build: 'cp312-manylinux_x86_64'
+
+          - arch: 'aarch64'
+            build: 'cp313-manylinux_aarch64'
+          - arch: 'x86_64'
+            build: 'cp313-manylinux_x86_64'
     runs-on: ubuntu-22.04
     env:
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
@@ -43,13 +58,10 @@ jobs:
       CIBW_BUILD_VERBOSITY: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: Run cibuildwheel
         run: |
           if [ "${CIBW_ARCHS}" = "aarch64" ]; then
@@ -57,14 +69,14 @@ jobs:
               sudo apt install -y qemu binfmt-support qemu-user-static
           fi
 
-          python3 -m pip install --upgrade pip==22.0.3
+          python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel==2.3.1
           python3 -m cibuildwheel --output-dir wheelhouse .
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-${{ matrix.py.build }}
           path: |
             wheelhouse
 
@@ -76,29 +88,29 @@ jobs:
           - build: 'cp38-macosx_x86_64'
           - build: 'cp39-macosx_x86_64'
           - build: 'cp310-macosx_x86_64'
-    runs-on: macos-12
+          - build: 'cp311-macosx_x86_64'
+          - build: 'cp312-macosx_x86_64'
+          - build: 'cp313-macosx_x86_64'
+    runs-on: macos-13
     env:
       CIBW_BUILD: ${{ matrix.py.build }}
       CIBW_BUILD_VERBOSITY: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: Run cibuildwheel
         run: |
-          python3 -m pip install --upgrade pip==22.0.3
+          python3 -m pip install --upgrade pip
           python3 -m pip install cibuildwheel==2.3.1
           python3 -m cibuildwheel --output-dir wheelhouse .
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-macos-${{ matrix.py.build }}
           path: |
             wheelhouse
 
@@ -110,28 +122,28 @@ jobs:
           - build: 'cp38-win_amd64'
           - build: 'cp39-win_amd64'
           - build: 'cp310-win_amd64'
+          - build: 'cp311-win_amd64'
+          - build: 'cp312-win_amd64'
+          - build: 'cp313-win_amd64'
     runs-on: windows-2022
     env:
       CIBW_BUILD_VERBOSITY: '1'
       CIBW_BUILD: ${{ matrix.py.build }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.9
+          python-version: 3.11
       - name: Run cibuildwheel
         run: |
-          python -m pip install --upgrade pip==22.0.3
+          python -m pip install --upgrade pip
           python -m pip install cibuildwheel==2.3.1
           python -m cibuildwheel --output-dir wheelhouse .
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-windows-${{ matrix.py.build }}
           path: |
             wheelhouse
