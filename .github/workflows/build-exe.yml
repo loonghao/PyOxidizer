@@ -36,9 +36,9 @@ jobs:
             cross: true
           - os: 'ubuntu-22.04'
             triple: 'x86_64-unknown-linux-musl'
-          - os: 'macos-12'
+          - os: 'macos-13'
             triple: 'aarch64-apple-darwin'
-          - os: 'macos-12'
+          - os: 'macos-13'
             triple: 'x86_64-apple-darwin'
           - os: 'windows-2022'
             triple: 'i686-pc-windows-msvc'
@@ -78,11 +78,9 @@ jobs:
           rust_toolchain: stable
           rust_target: ${{ matrix.target.triple }}
 
-      - uses: actions-rs/install@v0.1
+      - name: Install cross
         if: matrix.target.cross
-        with:
-          crate: cross
-          version: latest
+        run: cargo install cross
 
       - name: Build
         shell: bash
@@ -121,14 +119,14 @@ jobs:
 
       - name: Upload (non-Windows)
         if: runner.os != 'Windows'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-${{ inputs.bin }}-${{ matrix.target.triple }}
           path: upload/${{ inputs.bin }}
 
       - name: Upload (Windows)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-${{ inputs.bin }}-${{ matrix.target.triple }}
           path: upload/${{ inputs.bin }}.exe
@@ -136,7 +134,7 @@ jobs:
   macos-universal:
     needs:
       - build
-    runs-on: 'macos-12'
+    runs-on: 'macos-13'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -145,13 +143,13 @@ jobs:
       - uses: ./.github/actions/install-just
 
       - name: Download aarch64 executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: exe-${{ inputs.bin }}-aarch64-apple-darwin
           path: ${{ inputs.bin }}-aarch64
 
       - name: Download x86-64 executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: exe-${{ inputs.bin }}-x86_64-apple-darwin
           path: ${{ inputs.bin }}-x86-64
@@ -161,7 +159,7 @@ jobs:
           just actions-macos-universal ${{ inputs.bin }}
 
       - name: Upload Universal Executable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-${{ inputs.bin }}-macos-universal
           path: uploads/${{ inputs.bin }}

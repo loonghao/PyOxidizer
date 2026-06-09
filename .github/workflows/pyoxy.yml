@@ -26,13 +26,13 @@ jobs:
           strip target/x86_64-unknown-linux-musl/debug/pyoxidizer
 
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pyoxidizer-exe-linux
           path: target/x86_64-unknown-linux-musl/debug/pyoxidizer
 
   pyoxidizer-macos:
-    runs-on: 'macos-12'
+    runs-on: 'macos-13'
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +48,7 @@ jobs:
           strip target/debug/pyoxidizer
 
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pyoxidizer-exe-macos
           path: target/debug/pyoxidizer
@@ -63,6 +63,9 @@ jobs:
           - '3.8'
           - '3.9'
           - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
         target_triple:
           - 'x86_64-unknown-linux-gnu'
           # Not yet working due to rust config issues.
@@ -77,14 +80,14 @@ jobs:
           rust_target: ${{ matrix.target_triple }}
 
       - name: Download PyOxidizer Executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyoxidizer-exe-linux
           path: /usr/local/bin/
 
       - name: Restore Docker Image Cache
         id: cache-image
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/image.tar
           key: ${{ runner.os }}-${{ hashFiles('ci/linux-portable-binary.Dockerfile') }}
@@ -107,7 +110,7 @@ jobs:
           just actions-build-pyoxy-linux ${{ matrix.target_triple }} ${{ matrix.python_version }}
 
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-pyoxy-${{ matrix.target_triple }}-${{ matrix.python_version }}
           path: upload/*
@@ -124,10 +127,13 @@ jobs:
           - '3.8'
           - '3.9'
           - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
         target_triple:
           - 'aarch64-apple-darwin'
           - 'x86_64-apple-darwin'
-    runs-on: 'macos-12'
+    runs-on: 'macos-13'
     env:
       IN_CI: '1'
       AWS_REGION: us-west-2
@@ -150,7 +156,7 @@ jobs:
           rust_target: ${{ matrix.target_triple }}
 
       - name: Download PyOxidizer Executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: pyoxidizer-exe-macos
           path: /usr/local/bin/
@@ -161,7 +167,7 @@ jobs:
           just actions-build-pyoxy-macos ${{ matrix.target_triple }} ${{ matrix.python_version }}
 
       - name: Upload
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-pyoxy-${{ matrix.target_triple }}-${{ matrix.python_version }}
           path: upload/*
@@ -176,7 +182,10 @@ jobs:
           - '3.8'
           - '3.9'
           - '3.10'
-    runs-on: 'macos-12'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+    runs-on: 'macos-13'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -185,13 +194,13 @@ jobs:
       - uses: ./.github/actions/install-just
 
       - name: Download aarch64 executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: exe-pyoxy-aarch64-apple-darwin-${{ matrix.python_version }}
           path: pyoxy-aarch64
 
       - name: Download x86-64 executable
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: exe-pyoxy-x86_64-apple-darwin-${{ matrix.python_version }}
           path: pyoxy-x86-64
@@ -201,7 +210,7 @@ jobs:
           just actions-macos-universal pyoxy
 
       - name: Upload Universal Executable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: exe-pyoxy-macos-universal-${{ matrix.python_version }}
           path: uploads/*
