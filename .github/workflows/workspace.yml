@@ -21,10 +21,8 @@ jobs:
           # and the `Installing Rust` documentation when this changes.
           - '1.81.0'
         target:
-          - os: 'ubuntu-22.04'
+          - os: 'ubuntu-24.04'
             triple: 'x86_64-unknown-linux-gnu'
-          - os: 'macos-13'
-            triple: 'x86_64-apple-darwin'
           - os: 'windows-2022'
             triple: 'x86_64-pc-windows-msvc'
     continue-on-error: ${{ matrix.rust_toolchain == 'nightly' }}
