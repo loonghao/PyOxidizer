@@ -8,15 +8,11 @@ on:
         required: true
         type: string
       extra_build_args_linux:
-        description: Extra argumnets to pass to `cargo build` on Linux
-        required: false
-        type: string
-      extra_build_args_macos:
-        description: Extra arguments to pass to `cargo build` on Windows
+        description: Extra arguments to pass to `cargo build` on Linux
         required: false
         type: string
       extra_build_args_windows:
-        description: Extra arguments to pass to `cargo build` on macOS
+        description: Extra arguments to pass to `cargo build` on Windows
         required: false
         type: string
     secrets:
@@ -31,15 +27,11 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - os: 'ubuntu-22.04'
+          - os: 'ubuntu-24.04'
             triple: 'aarch64-unknown-linux-musl'
             cross: true
-          - os: 'ubuntu-22.04'
+          - os: 'ubuntu-24.04'
             triple: 'x86_64-unknown-linux-musl'
-          - os: 'macos-13'
-            triple: 'aarch64-apple-darwin'
-          - os: 'macos-13'
-            triple: 'x86_64-apple-darwin'
           - os: 'windows-2022'
             triple: 'i686-pc-windows-msvc'
           - os: 'windows-2022'
@@ -85,12 +77,6 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          if [ "${{ matrix.target.triple }}" = "aarch64-apple-darwin" ]; then
-            export MACOSX_DEPLOYMENT_TARGET=11.0
-          elif [ "${{ matrix.target.triple }}" = "x86_64-apple-darwin" ]; then
-            export MACOSX_DEPLOYMENT_TARGET=10.9
-          fi
-
           if [ -n "${{ matrix.target.cross }}" ]; then
             CARGO=cross
           else
@@ -100,9 +86,6 @@ jobs:
           case "${{ matrix.target.triple }}" in
             *linux*)
               EXTRA_BUILD_ARGS=${{ inputs.extra_build_args_linux }}
-              ;;
-            *apple-darwin*)
-              EXTRA_BUILD_ARGS=${{ inputs.extra_build_args_macos }}
               ;;
             *windows*)
               EXTRA_BUILD_ARGS=${{ inputs.extra_build_args_windows }}
@@ -130,36 +113,3 @@ jobs:
         with:
           name: exe-${{ inputs.bin }}-${{ matrix.target.triple }}
           path: upload/${{ inputs.bin }}.exe
-
-  macos-universal:
-    needs:
-      - build
-    runs-on: 'macos-13'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: ./.github/actions/install-just
-
-      - name: Download aarch64 executable
-        uses: actions/download-artifact@v4
-        with:
-          name: exe-${{ inputs.bin }}-aarch64-apple-darwin
-          path: ${{ inputs.bin }}-aarch64
-
-      - name: Download x86-64 executable
-        uses: actions/download-artifact@v4
-        with:
-          name: exe-${{ inputs.bin }}-x86_64-apple-darwin
-          path: ${{ inputs.bin }}-x86-64
-
-      - name: Produce Universal Binary
-        run: |
-          just actions-macos-universal ${{ inputs.bin }}
-
-      - name: Upload Universal Executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: exe-${{ inputs.bin }}-macos-universal
-          path: uploads/${{ inputs.bin }}

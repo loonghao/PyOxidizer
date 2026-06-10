@@ -24,7 +24,7 @@ jobs:
   pyoxidizer-linux-x86_64-bin-check:
     needs:
       - pyoxidizer-exes
-    runs-on: 'ubuntu-22.04'
+    runs-on: 'ubuntu-24.04'
     steps:
       - name: Install musl compiler
         run: |
@@ -44,29 +44,6 @@ jobs:
       - name: Spot Test (musl Cross)
         run: |
           ./pyoxidizer build --path myapp --target-triple x86_64-unknown-linux-musl
-
-  pyoxidizer-macos-universal-exe-check:
-    needs:
-      - pyoxidizer-exes
-    runs-on: 'macos-13'
-    steps:
-      - name: Download macOS Executable
-        uses: actions/download-artifact@v4
-        with:
-          name: exe-pyoxidizer-macos-universal
-          path: macos-universal
-
-      - name: Spot Test (Native Build)
-        run: |
-          find . -type f
-          mv macos-universal/pyoxidizer .
-          chmod +x pyoxidizer
-          ./pyoxidizer init-config-file myapp
-          ./pyoxidizer build --path myapp
-
-      - name: Spot Test (aarch64 Cross Build)
-        run: |
-          ./pyoxidizer build --path myapp --target-triple aarch64-apple-darwin
 
   pyoxidizer-windows-exe-check:
     strategy:

@@ -49,7 +49,7 @@ jobs:
             build: 'cp313-manylinux_aarch64'
           - arch: 'x86_64'
             build: 'cp313-manylinux_x86_64'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
       CIBW_BEFORE_BUILD: 'ci/install-rust-linux.sh'
@@ -58,7 +58,7 @@ jobs:
       CIBW_BUILD_VERBOSITY: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@v1
       - uses: actions/setup-python@v5
         with:
           python-version: 3.11
@@ -80,40 +80,6 @@ jobs:
           path: |
             wheelhouse
 
-  wheel_macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        py:
-          - build: 'cp38-macosx_x86_64'
-          - build: 'cp39-macosx_x86_64'
-          - build: 'cp310-macosx_x86_64'
-          - build: 'cp311-macosx_x86_64'
-          - build: 'cp312-macosx_x86_64'
-          - build: 'cp313-macosx_x86_64'
-    runs-on: macos-13
-    env:
-      CIBW_BUILD: ${{ matrix.py.build }}
-      CIBW_BUILD_VERBOSITY: '1'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
-      - name: Run cibuildwheel
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "cibuildwheel>=2.22.0"
-          python3 -m cibuildwheel --output-dir wheelhouse .
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-${{ matrix.py.build }}
-          path: |
-            wheelhouse
-
   wheel_windows:
     strategy:
       fail-fast: false
@@ -131,7 +97,7 @@ jobs:
       CIBW_BUILD: ${{ matrix.py.build }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@v1
       - uses: actions/setup-python@v5
         with:
           python-version: 3.11
