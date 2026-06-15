@@ -51,7 +51,7 @@ path = "../python-oxidized-importer"
 default-features = false
 
 [dependencies.pyo3]
-version = "0.27.2"
+version = "0.29.0"
 default-features = false
 features = ["macros"]
 
@@ -61,7 +61,7 @@ path = "../python-packaging"
 default-features = false
 
 [build-dependencies]
-pyo3-build-config = { version = "0.27.2", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.29.0", features = ["resolve-config"] }
 
 [dev-dependencies]
 pathdiff = "0.2.2"

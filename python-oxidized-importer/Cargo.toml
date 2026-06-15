@@ -47,11 +47,11 @@ path = "../python-packaging"
 default-features = false
 
 [dependencies.pyo3]
-version = "0.27.2"
+version = "0.29.0"
 features = ["macros"]
 
 [build-dependencies]
-pyo3-build-config = { version = "0.27.2", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.29.0", features = ["resolve-config"] }
 
 [dependencies.zip]
 version = "2.2.0"

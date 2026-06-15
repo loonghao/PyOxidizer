@@ -198,7 +198,7 @@ impl<'a> ImportablePythonModule<'a, u8> {
             if ptr.is_null() {
                 Ok(None)
             } else {
-                Ok(Some(unsafe { PyObject::from_owned_ptr(py, ptr) }))
+                Ok(Some(unsafe { Py::<PyAny>::from_owned_ptr(py, ptr) }))
             }
         } else if let Some(path) = self.bytecode_path(optimize_level) {
             // TODO we could potentially avoid the double allocation for bytecode

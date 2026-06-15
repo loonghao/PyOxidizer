@@ -20,7 +20,7 @@ pub fn osstring_to_bytes<'py>(py: Python<'py>, s: OsString) -> Bound<'py, PyByte
     let b = s.as_bytes();
     unsafe {
         let o = pyffi::PyBytes_FromStringAndSize(b.as_ptr() as *const c_char, b.len() as isize);
-        Bound::from_owned_ptr(py, o).downcast_into_unchecked()
+        Bound::from_owned_ptr(py, o).cast_into_unchecked()
     }
 }
 
@@ -29,6 +29,6 @@ pub fn osstring_to_bytes<'py>(py: Python<'py>, s: OsString) -> Bound<'py, PyByte
     let w: Vec<u16> = s.encode_wide().collect();
     unsafe {
         let o = pyffi::PyBytes_FromStringAndSize(w.as_ptr() as *const c_char, w.len() as isize * 2);
-        Bound::from_owned_ptr(py, o).downcast_into_unchecked()
+        Bound::from_owned_ptr(py, o).cast_into_unchecked()
     }
 }
