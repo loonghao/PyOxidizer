@@ -20,7 +20,7 @@ use {
 fn discover_resolvers(py: Python<'_>) -> PyResult<Bound<'_, PyList>> {
     let sys_module = py.import("sys")?;
     let meta_path_attr = sys_module.getattr("meta_path")?;
-    let meta_path = meta_path_attr.downcast::<PyList>()?;
+    let meta_path = meta_path_attr.cast::<PyList>()?;
 
     let mut resolvers = vec![];
 
@@ -58,7 +58,7 @@ impl OxidizedDistribution {
         let context_type = finder.getattr("Context")?;
 
         let resolvers = discover_resolvers(py)?;
-        let resolvers_list: &Bound<'_, PyList> = resolvers.downcast()?;
+        let resolvers_list: &Bound<'_, PyList> = resolvers.cast()?;
         for resolver in resolvers_list.iter() {
             let kwargs = PyDict::new(py);
             kwargs.set_item("name", name)?;
@@ -66,7 +66,7 @@ impl OxidizedDistribution {
 
             let dists = resolver.call((context,), None)?;
 
-            let dists_list: &Bound<'_, PyList> = dists.downcast()?;
+            let dists_list: &Bound<'_, PyList> = dists.cast()?;
             let mut it = dists_list.iter();
 
             if let Some(dist) = it.next() {
@@ -113,10 +113,10 @@ impl OxidizedDistribution {
         let mut distributions: Vec<Bound<'py, PyAny>> = vec![];
 
         let resolvers = discover_resolvers(py)?;
-        let resolvers_list: &Bound<'py, PyList> = resolvers.downcast()?;
+        let resolvers_list: &Bound<'py, PyList> = resolvers.cast()?;
         for resolver in resolvers_list.iter() {
             let dists = resolver.call((&context,), None)?;
-            let dists_list: &Bound<'py, PyList> = dists.downcast()?;
+            let dists_list: &Bound<'py, PyList> = dists.cast()?;
             for distribution in dists_list.iter() {
                 distributions.push(distribution);
             }

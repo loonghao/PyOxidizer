@@ -226,7 +226,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // inject our custom importer.
 
         let oxidized_finder_loaded =
-            unsafe { Python::with_gil_unchecked(|py| self.inject_oxidized_importer(py))? };
+            unsafe { Python::assume_attached(|py| self.inject_oxidized_importer(py))? };
 
         // The GIL is still held after calling into PyO3.
         debug_assert_eq!(unsafe { pyffi::PyGILState_Check() }, 1);
@@ -369,7 +369,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
                 .map_err(|err| {
                     NewInterpreterError::new_from_pyerr(py, err, "obtaining sys.meta_path")
                 })?;
-            let meta_path_list: Bound<'_, pyo3::types::PyList> = meta_path.downcast_into().map_err(|err| {
+            let meta_path_list: Bound<'_, pyo3::types::PyList> = meta_path.cast_into().map_err(|err| {
                 NewInterpreterError::new_from_pyerr(py, err.into(), "casting sys.meta_path to list")
             })?;
             meta_path_list
@@ -707,7 +707,7 @@ fn write_modules_to_path(py: Python, path: &Path) -> Result<(), &'static str> {
         .map_err(|_| "could not obtain sys.modules")?;
 
     let modules = modules
-        .downcast::<PyDict>()
+        .cast::<PyDict>()
         .map_err(|_| "sys.modules is not a dict")?;
 
     let mut names = BTreeSet::new();

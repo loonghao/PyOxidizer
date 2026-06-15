@@ -39,7 +39,7 @@ fn get_unicode_argument() -> OsString {
 fn reprs(container: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     use pyo3::types::PyList;
     let mut names = Vec::new();
-    let list = container.downcast::<PyList>()?;
+    let list = container.cast::<PyList>()?;
     for x in list.iter() {
         names.push(x.to_string());
     }
@@ -433,11 +433,11 @@ rusty_fork_test! {
             let sys = py.import("sys").unwrap();
 
             let argvb_raw = sys.getattr("argvb").unwrap();
-            let argvb = argvb_raw.downcast::<PyList>().unwrap();
+            let argvb = argvb_raw.cast::<PyList>().unwrap();
             assert_eq!(argvb.len(), 2);
 
             let value_raw = argvb.get_item(1).unwrap();
-            let value_bytes = value_raw.downcast::<PyBytes>().unwrap();
+            let value_bytes = value_raw.cast::<PyBytes>().unwrap();
             assert_eq!(
                 value_bytes.as_bytes().to_vec(),
                 if cfg!(windows) {
@@ -462,11 +462,11 @@ rusty_fork_test! {
             let sys = py.import("sys").unwrap();
 
             let argv_raw = sys.getattr("argv").unwrap();
-            let argv = argv_raw.downcast::<PyList>().unwrap();
+            let argv = argv_raw.cast::<PyList>().unwrap();
             assert_eq!(argv.len(), 2);
 
             let value_raw = argv.get_item(1).unwrap();
-            let value_string = value_raw.downcast::<PyString>().unwrap();
+            let value_string = value_raw.cast::<PyString>().unwrap();
 
             // 中文 = \u4e2d\u6587 = chars [20013, 25991]
             let expected = "\u{4e2d}\u{6587}";
@@ -487,11 +487,11 @@ rusty_fork_test! {
             let sys = py.import("sys").unwrap();
 
             let argv_raw = sys.getattr("argv").unwrap();
-            let argv = argv_raw.downcast::<PyList>().unwrap();
+            let argv = argv_raw.cast::<PyList>().unwrap();
             assert_eq!(argv.len(), 2);
 
             let value_raw = argv.get_item(1).unwrap();
-            let value_string = value_raw.downcast::<PyString>().unwrap();
+            let value_string = value_raw.cast::<PyString>().unwrap();
             let value_str = value_string.to_str().unwrap();
 
             // The result in isolated mode without configure_locale is kinda wonky.
@@ -525,11 +525,11 @@ rusty_fork_test! {
             let sys = py.import("sys").unwrap();
 
             let argv_raw = sys.getattr("argv").unwrap();
-            let argv = argv_raw.downcast::<PyList>().unwrap();
+            let argv = argv_raw.cast::<PyList>().unwrap();
             assert_eq!(argv.len(), 2);
 
             let value_raw = argv.get_item(1).unwrap();
-            let value_string = value_raw.downcast::<PyString>().unwrap();
+            let value_string = value_raw.cast::<PyString>().unwrap();
 
             // 中文 = \u4e2d\u6587 = chars [20013, 25991]
             let expected = "\u{4e2d}\u{6587}";

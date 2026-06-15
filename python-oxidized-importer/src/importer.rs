@@ -107,7 +107,7 @@ fn extension_module_shared_library_create_module(
 
     // We found an existing module object. Return it.
     if !existing_module.is_null() {
-        return Ok(unsafe { PyObject::from_owned_ptr(py, existing_module) });
+        return Ok(unsafe { Py::<PyAny>::from_owned_ptr(py, existing_module) });
     }
 
     // An error occurred calling _PyImport_FindExtensionObjectEx(). Raise it.
@@ -255,14 +255,14 @@ fn load_dynamic_library(
         return if py_module.is_null() {
             Err(PyErr::fetch(py))
         } else {
-            Ok(unsafe { PyObject::from_owned_ptr(py, py_module) })
+            Ok(unsafe { Py::<PyAny>::from_owned_ptr(py, py_module) })
         };
     }
 
     // This is the single-phase initialization mechanism. Construct a module by calling
     // PyModule_GetDef(). py_module is a new reference. So we capture it to make sure we don't
     // leak it.
-    let py_module = unsafe { PyObject::from_owned_ptr(py, py_module) };
+    let py_module = unsafe { Py::<PyAny>::from_owned_ptr(py, py_module) };
 
     let mut module_def = unsafe { pyffi::PyModule_GetDef(py_module.as_ptr()) };
     if module_def.is_null() {
@@ -354,9 +354,9 @@ impl ImporterState {
         let marshal_module = py.import("marshal")?;
 
         let imp_module = bootstrap_module.getattr("_imp")?;
-        let imp_module = imp_module.downcast::<PyModule>()?.clone().unbind();
+        let imp_module = imp_module.cast::<PyModule>()?.clone().unbind();
         let sys_module = bootstrap_module.getattr("sys")?;
-        let sys_module = sys_module.downcast::<PyModule>()?;
+        let sys_module = sys_module.cast::<PyModule>()?;
         let meta_path_object = sys_module.getattr("meta_path")?;
 
         // We should be executing as part of
@@ -365,7 +365,7 @@ impl ImporterState {
         // sys.meta_path with [BuiltinImporter, FrozenImporter]. Those should be the
         // only meta path importers present.
 
-        let meta_path = meta_path_object.downcast::<PyList>()?;
+        let meta_path = meta_path_object.cast::<PyList>()?;
         if meta_path.len() < 2 {
             return Err(PyValueError::new_err(
                 "sys.meta_path does not contain 2 values",
@@ -383,7 +383,7 @@ impl ImporterState {
 
         let builtins_module: Bound<'_, PyDict> =
             unsafe { Bound::from_borrowed_ptr_or_err(py, pyffi::PyEval_GetBuiltins())? }
-                .downcast_into()?;
+                .cast_into()?;
 
         let exec_fn = match builtins_module.get_item("exec") {
             Ok(Some(v)) => v,
@@ -424,7 +424,7 @@ impl ImporterState {
                 ));
             }
 
-            PyObject::from_owned_ptr(py, ptr)
+            Py::<PyAny>::from_owned_ptr(py, ptr)
         };
 
         // We store a pointer to the heap memory and take care of destroying
@@ -1099,7 +1099,7 @@ impl OxidizedFinder {
                 Err(e) if e.is_instance_of::<pyo3::exceptions::PyStopIteration>(py) => break,
                 Err(e) => return Err(e),
             };
-            let resource = resource_raw.downcast::<OxidizedResource>()?;
+            let resource = resource_raw.cast::<OxidizedResource>()?;
 
             resources_state
                 .add_resource(pyobject_to_resource(&resource.borrow()))
@@ -1150,9 +1150,9 @@ impl OxidizedFinder {
         // can coerce to a Rust String easily, as Python str are Unicode.
 
         // Only accept str.
-        let path = path_original.downcast::<PyString>()?;
+        let path = path_original.cast::<PyString>()?;
 
-        let path_hook_base = slf.path_hook_base_str(py).downcast::<PyString>()?.clone();
+        let path_hook_base = slf.path_hook_base_str(py).cast::<PyString>()?.clone();
 
         let target_package = if path.compare(&path_hook_base)? == std::cmp::Ordering::Equal {
             None
@@ -1370,7 +1370,7 @@ pub fn replace_meta_path_importers<'a, 'py>(
 /// `sys.meta_path` and `sys.path_hooks`.
 pub fn remove_external_importers(sys_module: &Bound<'_, PyModule>) -> PyResult<()> {
     let meta_path = sys_module.getattr("meta_path")?;
-    let meta_path = meta_path.downcast::<PyList>()?;
+    let meta_path = meta_path.cast::<PyList>()?;
 
     // We need to mutate the lists in place so any updates are reflected
     // in references to the lists.
@@ -1393,7 +1393,7 @@ pub fn remove_external_importers(sys_module: &Bound<'_, PyModule>) -> PyResult<(
             index += 1;
         } else if entry
             .getattr("__module__")?
-            .downcast::<PyString>()?
+            .cast::<PyString>()?
             .to_string_lossy()
             == "_frozen_importlib"
         {
@@ -1404,7 +1404,7 @@ pub fn remove_external_importers(sys_module: &Bound<'_, PyModule>) -> PyResult<(
     }
 
     let path_hooks = sys_module.getattr("path_hooks")?;
-    let path_hooks = path_hooks.downcast::<PyList>()?;
+    let path_hooks = path_hooks.cast::<PyList>()?;
 
     let mut index = 0;
     while index < path_hooks.len() {

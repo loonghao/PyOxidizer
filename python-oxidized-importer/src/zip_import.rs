@@ -509,7 +509,7 @@ impl OxidizedZipFinder {
                     fullname.to_string(),
                 )));
             } else {
-                unsafe { PyObject::from_owned_ptr(py, ptr) }
+                unsafe { Py::<PyAny>::from_owned_ptr(py, ptr) }
             };
 
             marshal_loads.call1(py, (bytecode_obj,))

@@ -8,7 +8,8 @@ use {
     crate::py_packaging::config::PyembedPythonInterpreterConfig,
     anyhow::{anyhow, Context, Result},
     pyo3_build_config::{
-        BuildFlags, InterpreterConfig as PyO3InterpreterConfig, PythonImplementation, PythonVersion,
+        BuildFlags, InterpreterConfig as PyO3InterpreterConfig,
+        InterpreterConfigBuilder, PythonImplementation, PythonVersion,
     },
     python_packaging::{
         licensing::{LicensedComponent, LicensedComponents},
@@ -336,30 +337,26 @@ impl<'a> EmbeddedPythonContext<'a> {
         &self,
         dest_dir: impl AsRef<Path>,
     ) -> Result<PyO3InterpreterConfig> {
-        Ok(PyO3InterpreterConfig {
-            implementation: self.python_implementation,
-            version: self.python_version,
-            // Irrelevant since we control link settings below.
-            shared: matches!(
-                &self.link_settings,
-                LibpythonLinkSettings::ExistingDynamic(_)
-            ),
-            // pyembed requires the full Python API.
-            abi3: false,
-            // We define linking info via explicit build script lines.
-            lib_name: None,
-            lib_dir: None,
-            executable: Some(self.python_exe_host.to_string_lossy().to_string()),
-            // TODO set from Python distribution metadata.
-            pointer_width: Some(if self.target_triple.starts_with("i686-") {
-                32
-            } else {
-                64
-            }),
-            build_flags: BuildFlags(self.python_build_flags.0.clone()),
-            suppress_build_script_link_lines: true,
-            extra_build_script_lines: self
-                .link_settings
+        let mut builder = InterpreterConfigBuilder::new(
+            self.python_implementation,
+            self.python_version,
+        )
+        .shared(matches!(
+            &self.link_settings,
+            LibpythonLinkSettings::ExistingDynamic(_)
+        ))
+        .lib_name(None::<String>)
+        .lib_dir(None::<String>)
+        .executable(Some(self.python_exe_host.to_string_lossy().to_string()))
+        .pointer_width(Some(if self.target_triple.starts_with("i686-") {
+            32
+        } else {
+            64
+        }))
+        .build_flags(BuildFlags(self.python_build_flags.0.clone()))
+        .suppress_build_script_link_lines(true)
+        .extra_build_script_lines(
+            self.link_settings
                 .linking_annotations(
                     dest_dir.as_ref(),
                     self.target_triple.contains("-windows-"),
@@ -368,9 +365,10 @@ impl<'a> EmbeddedPythonContext<'a> {
                 .iter()
                 .map(|la| la.to_cargo_annotation())
                 .collect::<Vec<_>>(),
-            // macOS Python3.framework requires special rpath handling
-            python_framework_prefix: None,
-        })
+        )
+        .python_framework_prefix(None::<String>);
+
+        builder.finalize().map_err(|e| anyhow::anyhow!("{e}"))
     }
 
     /// Ensure packed resources files are written.
