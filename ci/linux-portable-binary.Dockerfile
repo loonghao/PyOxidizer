@@ -1,7 +1,7 @@
 # Debian Bookworm (stable).
 # Used to produce a portable Linux binary of PyOxidizer via a containerized build
 # with a pinned toolchain. The resulting binary is statically linked against musl.
-FROM debian:bookworm-20250519-slim
+FROM debian:bookworm-slim
 MAINTAINER Gregory Szorc <gregory.szorc@gmail.com>
 
 RUN groupadd -g 1000 build && \
