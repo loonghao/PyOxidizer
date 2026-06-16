@@ -5,6 +5,8 @@
 //! Manage an embedded Python interpreter.
 
 // Private CPython API not exposed by pyo3-ffi
+// _Py_InitializeMain is not exported on Windows python-build-standalone builds.
+#[cfg(not(windows))]
 extern "C" {
     fn _Py_InitializeMain() -> pyo3::ffi::PyStatus;
 }
@@ -207,7 +209,11 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
 
         // Enable multi-phase initialization. This allows us to initialize
         // our custom importer before Python attempts any imports.
-        py_config._init_main = 0;
+        // On Windows, _Py_InitializeMain is not exported so we use single-phase init.
+        #[cfg(not(windows))]
+        {
+            py_config._init_main = 0;
+        }
 
         let status = unsafe { pyffi::Py_InitializeFromConfig(&py_config) };
         if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
@@ -226,7 +232,10 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // inject our custom importer.
 
         let py = unsafe { Python::assume_attached() };
+        #[cfg(not(windows))]
         let oxidized_finder_loaded = self.inject_oxidized_importer(py)?;
+        #[cfg(windows)]
+        let oxidized_finder_loaded = false;
 
         // The GIL is still held after calling into PyO3.
         debug_assert_eq!(unsafe { pyffi::PyGILState_Check() }, 1);
@@ -234,12 +243,15 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // Now proceed with the Python main initialization. This will initialize
         // importlib. And if the custom importlib bytecode was registered above,
         // our extension module will get imported and initialized.
-        let status = unsafe { _Py_InitializeMain() };
-        if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
-            return Err(NewInterpreterError::new_from_pystatus(
-                &status,
-                "initializing Python main",
-            ));
+        #[cfg(not(windows))]
+        {
+            let status = unsafe { _Py_InitializeMain() };
+            if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
+                return Err(NewInterpreterError::new_from_pystatus(
+                    &status,
+                    "initializing Python main",
+                ));
+            }
         }
 
         // The GIL is held after finishing initialization.

@@ -11,7 +11,7 @@ for importing Python modules from memory.
 
 // Windows-specific imports for in-memory extension module loading
 // Only available for Python < 3.11 due to private API dependencies
-#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
+#[cfg(all(windows, not(any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), not(feature = "extension-module")))]
 use {
     crate::memory_dll::{free_library_memory, get_proc_address_memory, load_library_memory},
     pyo3::exceptions::PySystemError,
@@ -22,8 +22,8 @@ use {
 // These are internal CPython APIs needed for extension module loading on Windows
 // Note: These APIs are only available in Python < 3.11. In Python 3.11+, these
 // private APIs were removed or made internal, so in-memory extension module
-// loading is not supported on Windows for Python 3.11+.
-#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
+// loading is not supported on Windows.
+#[cfg(all(windows, not(any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), not(feature = "extension-module")))]
 mod private_ffi {
     use pyo3::ffi::PyObject;
     use std::os::raw::c_char;
@@ -67,7 +67,7 @@ use {
 };
 
 // py_init_fn is only needed for Python < 3.11 on Windows
-#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
+#[cfg(all(windows, not(any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), not(feature = "extension-module")))]
 #[allow(non_camel_case_types)]
 type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 
@@ -87,10 +87,10 @@ type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 /// `FILE*` for the extension location, so we can't call it. So we need to
 /// reimplement it. Documentation of that is inline.
 ///
-/// Note: This implementation uses private CPython APIs that are only available
-/// in Python < 3.11. For Python 3.11+, in-memory extension module loading is
+/// Note: This implementation uses private CPython APIs that were available
+/// in Python < 3.10. For Python 3.10+, in-memory extension module loading is
 /// not supported on Windows.
-#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
+#[cfg(all(windows, not(any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), not(feature = "extension-module")))]
 fn extension_module_shared_library_create_module(
     resources_state: &PythonResourcesState<u8>,
     py: Python<'_>,
@@ -138,12 +138,12 @@ fn extension_module_shared_library_create_module(
     })
 }
 
-/// In-memory extension module loading is not supported on Windows for Python 3.11+
+/// In-memory extension module loading is not supported on Windows
 /// because the required private CPython APIs (_PyImport_FindExtensionObject,
 /// _Py_PackageContext, _PyImport_FixupExtensionObject) are no longer exported.
 /// Also not supported when building with `extension-module` feature (stable ABI)
 /// because the private APIs are not in the stable ABI library (python3.dll).
-#[cfg(any(all(windows, Py_3_11), all(windows, feature = "extension-module")))]
+#[cfg(any(all(windows, any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), all(windows, feature = "extension-module")))]
 fn extension_module_shared_library_create_module(
     _resources_state: &PythonResourcesState<u8>,
     _py: Python<'_>,
@@ -154,7 +154,7 @@ fn extension_module_shared_library_create_module(
     _library_data: &[u8],
 ) -> PyResult<Py<PyAny>> {
     Err(PyImportError::new_err(format!(
-        "in-memory extension module loading is not supported on Windows for Python 3.11+: {}",
+        "in-memory extension module loading is not supported on Windows: {}",
         name
     )))
 }
@@ -173,8 +173,8 @@ fn extension_module_shared_library_create_module(
 }
 
 /// Reimplementation of `_PyImport_LoadDynamicModuleWithSpec()`.
-/// Only available for Python < 3.11 due to private API dependencies.
-#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
+/// Only available for Python < 3.10 on Windows.
+#[cfg(all(windows, not(any(Py_3_10, Py_3_11, Py_3_12, Py_3_13)), not(feature = "extension-module")))]
 fn load_dynamic_library(
     py: Python<'_>,
     sys_modules: &Bound<'_, PyAny>,
@@ -936,7 +936,7 @@ impl OxidizedFinder {
         };
 
         crate::package_metadata::find_distributions(py, state.clone(), name.as_ref(), path.as_ref())?
-            .call_method0("__iter__")
+            .into_any()
     }
 
     // pkgutil methods.

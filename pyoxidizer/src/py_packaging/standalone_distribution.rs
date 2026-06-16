@@ -104,6 +104,7 @@ pub static NO_BYTECODE_MODULES: Lazy<Vec<&'static str>> = Lazy::new(|| {
         "test.badsyntax_future8",
         "test.badsyntax_future9",
         "test.badsyntax_future10",
+        "test.test_future_stmt.badsyntax_future10",
         "test.badsyntax_pep3120",
     ]
 });
