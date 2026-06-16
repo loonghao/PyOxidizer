@@ -935,8 +935,8 @@ impl OxidizedFinder {
             (None, None)
         };
 
-        crate::package_metadata::find_distributions(py, state.clone(), name.as_ref(), path.as_ref())?
-            .into_any()
+        Ok(crate::package_metadata::find_distributions(py, state.clone(), name.as_ref(), path.as_ref())?
+            .into_any())
     }
 
     // pkgutil methods.
