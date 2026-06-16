@@ -541,10 +541,10 @@ mod tests {
     }
 
     #[test]
-    fn test_default_python_distribution_python_310() -> Result<()> {
+    fn test_default_python_distribution_python_312() -> Result<()> {
         let mut env = test_evaluation_context_builder()?.into_context()?;
 
-        let dist = env.eval("default_python_distribution(python_version='3.10')")?;
+        let dist = env.eval("default_python_distribution(python_version='3.12')")?;
         assert_eq!(dist.get_type(), "PythonDistribution");
 
         let wanted = PYTHON_DISTRIBUTIONS
