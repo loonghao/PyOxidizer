@@ -1,7 +1,9 @@
-# Debian Bookworm (stable).
+# Debian Trixie (testing).
 # Used to produce a portable Linux binary of PyOxidizer via a containerized build
 # with a pinned toolchain. The resulting binary is statically linked against musl.
-FROM debian:bookworm-slim
+# Trixie provides binutils >= 2.43 which supports the rlib format produced by
+# Rust 1.88.0+ (previously bookworm's binutils 2.40 failed with "file format not recognized").
+FROM debian:trixie-slim
 MAINTAINER Gregory Szorc <gregory.szorc@gmail.com>
 
 RUN groupadd -g 1000 build && \
@@ -40,7 +42,7 @@ USER build
 # Install Rust toolchain via rustup.
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh && \
   chmod +x rustup-init.sh && \
-  ./rustup-init.sh -y --default-toolchain 1.85.0 --profile minimal && \
+  ./rustup-init.sh -y --default-toolchain 1.88.0 --profile minimal && \
   ~/.cargo/bin/rustup target add x86_64-unknown-linux-musl
 
 # Install a recent Python for build-time scripting.
