@@ -2932,8 +2932,7 @@ pub mod tests {
         let env = get_env()?;
 
         // The build of 6.0 switched to Cython, which we don't intercept.
-        // And 5.3 isn't marked as compatible with 3.10. So we pin to older
-        // Python and a package version.
+        // We pin to an older package version that still uses setup.py.
 
         for libpython_link_mode in vec![
             BinaryLibpythonLinkMode::Static,
@@ -2941,7 +2940,7 @@ pub mod tests {
         ] {
             let options = StandalonePythonExecutableBuilderOptions {
                 target_triple: "x86_64-unknown-linux-gnu".to_string(),
-                distribution_version: Some("3.9".into()),
+                distribution_version: Some("3.10".into()),
                 extension_module_filter: Some(ExtensionModuleFilter::All),
                 libpython_link_mode: libpython_link_mode.clone(),
                 resources_location: Some(ConcreteResourceLocation::InMemory),

@@ -498,19 +498,18 @@ mod tests {
     }
 
     #[test]
-    // Python 3.8 not supported on aarch64.
-    #[cfg(not(target_arch = "aarch64"))]
-    fn test_default_python_distribution_python_38() -> Result<()> {
+    // Python 3.8 and 3.9 are EOL and no longer distributed by python-build-standalone.
+    fn test_default_python_distribution_python_310() -> Result<()> {
         let mut env = test_evaluation_context_builder()?.into_context()?;
 
-        let dist = env.eval("default_python_distribution(python_version='3.8')")?;
+        let dist = env.eval("default_python_distribution(python_version='3.10')")?;
         assert_eq!(dist.get_type(), "PythonDistribution");
 
         let wanted = PYTHON_DISTRIBUTIONS
             .find_distribution(
                 default_target_triple(),
                 &DistributionFlavor::Standalone,
-                Some("3.8"),
+                Some("3.10"),
             )
             .unwrap();
 
@@ -521,17 +520,17 @@ mod tests {
     }
 
     #[test]
-    fn test_default_python_distribution_python_39() -> Result<()> {
+    fn test_default_python_distribution_python_311() -> Result<()> {
         let mut env = test_evaluation_context_builder()?.into_context()?;
 
-        let dist = env.eval("default_python_distribution(python_version='3.9')")?;
+        let dist = env.eval("default_python_distribution(python_version='3.11')")?;
         assert_eq!(dist.get_type(), "PythonDistribution");
 
         let wanted = PYTHON_DISTRIBUTIONS
             .find_distribution(
                 default_target_triple(),
                 &DistributionFlavor::Standalone,
-                Some("3.9"),
+                Some("3.11"),
             )
             .unwrap();
 

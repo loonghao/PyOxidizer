@@ -65,16 +65,8 @@ pub fn get_default_distribution(
 pub fn get_host_distribution_from_target(
     target: &Arc<StandaloneDistribution>,
 ) -> Result<Arc<StandaloneDistribution>> {
-    // We have a matching host distribution for each (major-minor, triple) tuple except
-    // for 3.8 aarch64-apple-darwin, where we don't have a 3.8 distribution. So in that
-    // scenario return a 3.9 distribution.
-    let major_minor = if target.python_major_minor_version() == "3.8"
-        && default_target_triple() == "aarch64-apple-darwin"
-    {
-        "3.9".to_string()
-    } else {
-        target.python_major_minor_version()
-    };
+    // All currently supported distributions have matching host distributions.
+    let major_minor = target.python_major_minor_version();
 
     get_default_distribution(Some(major_minor.as_str()))
 }
