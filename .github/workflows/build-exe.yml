@@ -74,6 +74,11 @@ jobs:
         if: matrix.target.cross
         run: cargo install cross
 
+      - name: Install NASM (Windows i686)
+        if: runner.os == 'Windows' && contains(matrix.target.triple, 'i686')
+        shell: bash
+        run: choco install nasm -y
+
       - name: Build
         shell: bash
         run: |

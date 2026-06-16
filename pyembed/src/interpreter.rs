@@ -225,8 +225,8 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // importlib._bootstrap_external. This is where we work our magic to
         // inject our custom importer.
 
-        let oxidized_finder_loaded =
-            unsafe { Python::assume_attached(|py| self.inject_oxidized_importer(py))? };
+        let py = unsafe { Python::assume_attached() };
+        let oxidized_finder_loaded = self.inject_oxidized_importer(py)?;
 
         // The GIL is still held after calling into PyO3.
         debug_assert_eq!(unsafe { pyffi::PyGILState_Check() }, 1);

@@ -236,9 +236,9 @@ fn parse_python_json(path: &Path) -> Result<PythonJsonMain> {
                 .as_str()
                 .ok_or_else(|| anyhow!("unable to parse version as a string"))?;
 
-            if version != "7" {
+            if version != "7" && version != "8" {
                 return Err(anyhow!(
-                    "expected version 7 standalone distribution; found version {}",
+                    "expected version 7 or 8 standalone distribution; found version {}",
                     version
                 ));
             }
