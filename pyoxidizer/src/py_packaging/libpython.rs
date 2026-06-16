@@ -278,7 +278,26 @@ pub fn link_libpython(
     let mut objects = BTreeSet::new();
 
     // Link our custom config.c's object file.
-    objects.insert(config_object_path);
+    // The cc crate may produce a static library (libirrelevant.a) instead of a
+    // standalone .o file depending on its version. Check if config.o exists;
+    // if not, use the generated static library as a fallback.
+    if config_object_path.exists() {
+        objects.insert(config_object_path);
+    } else {
+        let lib_path = config_c_dir.join("libirrelevant.a");
+        if lib_path.exists() {
+            warn!(
+                "config.o not found, using {} instead",
+                lib_path.display()
+            );
+            objects.insert(lib_path);
+        } else {
+            return Err(anyhow!(
+                "neither config.o nor libirrelevant.a found in {}",
+                config_c_dir.display()
+            ));
+        }
+    }
 
     for (i, location) in context.object_files.iter().enumerate() {
         match location {

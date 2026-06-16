@@ -11,7 +11,7 @@ for importing Python modules from memory.
 
 // Windows-specific imports for in-memory extension module loading
 // Only available for Python < 3.11 due to private API dependencies
-#[cfg(all(windows, not(Py_3_11)))]
+#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
 use {
     crate::memory_dll::{free_library_memory, get_proc_address_memory, load_library_memory},
     pyo3::exceptions::PySystemError,
@@ -23,7 +23,7 @@ use {
 // Note: These APIs are only available in Python < 3.11. In Python 3.11+, these
 // private APIs were removed or made internal, so in-memory extension module
 // loading is not supported on Windows for Python 3.11+.
-#[cfg(all(windows, not(Py_3_11)))]
+#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
 mod private_ffi {
     use pyo3::ffi::PyObject;
     use std::os::raw::c_char;
@@ -67,7 +67,7 @@ use {
 };
 
 // py_init_fn is only needed for Python < 3.11 on Windows
-#[cfg(all(windows, not(Py_3_11)))]
+#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
 #[allow(non_camel_case_types)]
 type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 
@@ -90,7 +90,7 @@ type py_init_fn = extern "C" fn() -> *mut pyffi::PyObject;
 /// Note: This implementation uses private CPython APIs that are only available
 /// in Python < 3.11. For Python 3.11+, in-memory extension module loading is
 /// not supported on Windows.
-#[cfg(all(windows, not(Py_3_11)))]
+#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
 fn extension_module_shared_library_create_module(
     resources_state: &PythonResourcesState<u8>,
     py: Python<'_>,
@@ -141,7 +141,9 @@ fn extension_module_shared_library_create_module(
 /// In-memory extension module loading is not supported on Windows for Python 3.11+
 /// because the required private CPython APIs (_PyImport_FindExtensionObject,
 /// _Py_PackageContext, _PyImport_FixupExtensionObject) are no longer exported.
-#[cfg(all(windows, Py_3_11))]
+/// Also not supported when building with `extension-module` feature (stable ABI)
+/// because the private APIs are not in the stable ABI library (python3.dll).
+#[cfg(any(all(windows, Py_3_11), all(windows, feature = "extension-module")))]
 fn extension_module_shared_library_create_module(
     _resources_state: &PythonResourcesState<u8>,
     _py: Python<'_>,
@@ -172,7 +174,7 @@ fn extension_module_shared_library_create_module(
 
 /// Reimplementation of `_PyImport_LoadDynamicModuleWithSpec()`.
 /// Only available for Python < 3.11 due to private API dependencies.
-#[cfg(all(windows, not(Py_3_11)))]
+#[cfg(all(windows, not(Py_3_11), not(feature = "extension-module")))]
 fn load_dynamic_library(
     py: Python<'_>,
     sys_modules: &Bound<'_, PyAny>,
