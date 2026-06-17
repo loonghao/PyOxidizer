@@ -21,7 +21,7 @@ use {
 
 /// Scans a filesystem path for Python resources and turns them into Python types.
 #[pyfunction]
-pub(crate) fn find_resources_in_path<'p>(py: Python<'p>, path: &PyAny) -> PyResult<&'p PyList> {
+pub(crate) fn find_resources_in_path<'py>(py: Python<'py>, path: &Bound<'_, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let path = pyobject_to_pathbuf(py, path)?;
 
     if !path.is_dir() {
@@ -72,19 +72,19 @@ pub(crate) fn find_resources_in_path<'p>(py: Python<'p>, path: &PyAny) -> PyResu
 
         match resource {
             PythonResource::ModuleSource(source) => {
-                res.push(PythonModuleSource::new(py, source.into_owned())?.to_object(py));
+                res.push(PythonModuleSource::new(py, source.into_owned())?.into_any().unbind());
             }
             PythonResource::ModuleBytecode(bytecode) => {
-                res.push(PythonModuleBytecode::new(py, bytecode.into_owned())?.to_object(py));
+                res.push(PythonModuleBytecode::new(py, bytecode.into_owned())?.into_any().unbind());
             }
             PythonResource::ExtensionModule(extension) => {
-                res.push(PythonExtensionModule::new(py, extension.into_owned())?.to_object(py));
+                res.push(PythonExtensionModule::new(py, extension.into_owned())?.into_any().unbind());
             }
             PythonResource::PackageResource(resource) => {
-                res.push(PythonPackageResource::new(py, resource.into_owned())?.to_object(py));
+                res.push(PythonPackageResource::new(py, resource.into_owned())?.into_any().unbind());
             }
             PythonResource::PackageDistributionResource(resource) => res.push(
-                PythonPackageDistributionResource::new(py, resource.into_owned())?.to_object(py),
+                PythonPackageDistributionResource::new(py, resource.into_owned())?.into_any().unbind(),
             ),
             PythonResource::ModuleBytecodeRequest(_) => {}
             PythonResource::EggFile(_) => {}
@@ -93,10 +93,10 @@ pub(crate) fn find_resources_in_path<'p>(py: Python<'p>, path: &PyAny) -> PyResu
         }
     }
 
-    Ok(PyList::new(py, &res))
+    PyList::new(py, &res)
 }
 
-pub(crate) fn init_module(m: &PyModule) -> PyResult<()> {
+pub(crate) fn init_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(find_resources_in_path, m)?)?;
 
     Ok(())

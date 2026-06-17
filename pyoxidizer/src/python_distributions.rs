@@ -12,7 +12,7 @@ use {
 pub use crate::default_python_distributions::PYTHON_DISTRIBUTIONS;
 
 /// Default Python X.Y version to use.
-pub const DEFAULT_PYTHON_VERSION: &str = "3.10";
+pub const DEFAULT_PYTHON_VERSION: &str = "3.11";
 
 /// A collection of available Python distributions.
 pub struct PythonDistributionCollection {

@@ -19,16 +19,16 @@ fn new_interpreter<'interpreter, 'resources>(
     Ok(interp)
 }
 
-fn get_importer(interp: &MainPythonInterpreter) -> Result<PyObject> {
+fn get_importer(interp: &MainPythonInterpreter) -> Result<Py<PyAny>> {
     interp.with_gil(|py| {
         let sys = py.import("sys").unwrap();
         let meta_path = sys.getattr("meta_path").unwrap();
         assert_eq!(meta_path.len().unwrap(), 2);
 
         let importer = meta_path.get_item(0).unwrap();
-        assert_eq!(importer.get_type().name().unwrap(), "OxidizedFinder");
+        assert_eq!(importer.get_type().name().unwrap().to_str().unwrap(), "OxidizedFinder");
 
-        Ok(importer.to_object(py))
+        Ok(importer.unbind())
     })
 }
 
@@ -47,7 +47,7 @@ rusty_fork_test! {
             assert_eq!(meta_path.len().unwrap(), 2);
 
             let importer = meta_path.get_item(0).unwrap();
-            assert_eq!(importer.get_type().name().unwrap(), "OxidizedFinder");
+            assert_eq!(importer.get_type().name().unwrap().to_str().unwrap(), "OxidizedFinder");
 
             let errno = py.import("errno").unwrap();
             let loader = errno.getattr("__loader__").unwrap();

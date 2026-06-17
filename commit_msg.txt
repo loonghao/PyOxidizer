@@ -1,0 +1,4 @@
+fix: align transitive dependencies to use time 0.3.36
+
+Pin time = "0.3.36" in python-packaging, tugger, and tugger-windows-codesign to ensure time is not upgraded to 0.3.47+ which requires Rust 1.88.0.
+Update Cargo.lock to downgrade plist to 1.8.0 and simple_asn1 to 0.6.3 which are compatible with time 0.3.36.

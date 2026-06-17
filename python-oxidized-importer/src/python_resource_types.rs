@@ -22,14 +22,14 @@ use {
     std::cell::{Ref, RefCell},
 };
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct PythonModuleSource {
     resource: RefCell<RawPythonModuleSource>,
 }
 
 impl PythonModuleSource {
-    pub fn new(py: Python, resource: RawPythonModuleSource) -> PyResult<&PyCell<Self>> {
-        PyCell::new(
+    pub fn new(py: Python<'_>, resource: RawPythonModuleSource) -> PyResult<Bound<'_, Self>> {
+        Bound::new(
             py,
             PythonModuleSource {
                 resource: RefCell::new(resource),
@@ -68,7 +68,7 @@ impl PythonModuleSource {
     }
 
     #[getter]
-    fn get_source<'p>(&self, py: Python<'p>) -> PyResult<&'p PyBytes> {
+    fn get_source<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let source = self
             .resource
             .borrow()
@@ -80,7 +80,7 @@ impl PythonModuleSource {
     }
 
     #[setter]
-    fn set_source(&self, value: Option<&PyAny>) -> PyResult<()> {
+    fn set_source(&self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(value) = value {
             self.resource.borrow_mut().source = FileData::Memory(pyobject_to_owned_bytes(value)?);
 
@@ -107,14 +107,14 @@ impl PythonModuleSource {
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct PythonModuleBytecode {
     resource: RefCell<RawPythonModuleBytecode>,
 }
 
 impl PythonModuleBytecode {
-    pub fn new(py: Python, resource: RawPythonModuleBytecode) -> PyResult<&PyCell<Self>> {
-        PyCell::new(
+    pub fn new(py: Python<'_>, resource: RawPythonModuleBytecode) -> PyResult<Bound<'_, Self>> {
+        Bound::new(
             py,
             Self {
                 resource: RefCell::new(resource),
@@ -153,7 +153,7 @@ impl PythonModuleBytecode {
     }
 
     #[getter]
-    fn get_bytecode<'p>(&self, py: Python<'p>) -> PyResult<&'p PyBytes> {
+    fn get_bytecode<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let bytecode = self
             .resource
             .borrow()
@@ -164,7 +164,7 @@ impl PythonModuleBytecode {
     }
 
     #[setter]
-    fn set_bytecode(&self, value: Option<&PyAny>) -> PyResult<()> {
+    fn set_bytecode(&self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(value) = value {
             self.resource
                 .borrow_mut()
@@ -212,14 +212,14 @@ impl PythonModuleBytecode {
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct PythonPackageResource {
     resource: RefCell<RawPythonPackageResource>,
 }
 
 impl PythonPackageResource {
-    pub fn new(py: Python, resource: RawPythonPackageResource) -> PyResult<&PyCell<Self>> {
-        PyCell::new(
+    pub fn new(py: Python<'_>, resource: RawPythonPackageResource) -> PyResult<Bound<'_, Self>> {
+        Bound::new(
             py,
             Self {
                 resource: RefCell::new(resource),
@@ -275,7 +275,7 @@ impl PythonPackageResource {
     }
 
     #[getter]
-    fn get_data<'p>(&self, py: Python<'p>) -> PyResult<&'p PyBytes> {
+    fn get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let data = self
             .resource
             .borrow()
@@ -287,7 +287,7 @@ impl PythonPackageResource {
     }
 
     #[setter]
-    fn set_data(&self, value: Option<&PyAny>) -> PyResult<()> {
+    fn set_data(&self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(value) = value {
             self.resource.borrow_mut().data = FileData::Memory(pyobject_to_owned_bytes(value)?);
 
@@ -298,17 +298,17 @@ impl PythonPackageResource {
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct PythonPackageDistributionResource {
     resource: RefCell<RawPythonPackageDistributionResource>,
 }
 
 impl PythonPackageDistributionResource {
     pub fn new(
-        py: Python,
+        py: Python<'_>,
         resource: RawPythonPackageDistributionResource,
-    ) -> PyResult<&PyCell<Self>> {
-        PyCell::new(
+    ) -> PyResult<Bound<'_, Self>> {
+        Bound::new(
             py,
             Self {
                 resource: RefCell::new(resource),
@@ -380,7 +380,7 @@ impl PythonPackageDistributionResource {
     }
 
     #[getter]
-    fn get_data<'p>(&self, py: Python<'p>) -> PyResult<&'p PyBytes> {
+    fn get_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
         let data = self
             .resource
             .borrow()
@@ -392,7 +392,7 @@ impl PythonPackageDistributionResource {
     }
 
     #[setter]
-    fn set_data(&self, value: Option<&PyAny>) -> PyResult<()> {
+    fn set_data(&self, value: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
         if let Some(value) = value {
             self.resource.borrow_mut().data = FileData::Memory(pyobject_to_owned_bytes(value)?);
 
@@ -403,14 +403,14 @@ impl PythonPackageDistributionResource {
     }
 }
 
-#[pyclass(module = "oxidized_importer")]
+#[pyclass(module = "oxidized_importer", unsendable)]
 pub(crate) struct PythonExtensionModule {
     resource: RefCell<RawPythonExtensionModule>,
 }
 
 impl PythonExtensionModule {
-    pub fn new(py: Python, resource: RawPythonExtensionModule) -> PyResult<&PyCell<Self>> {
-        PyCell::new(
+    pub fn new(py: Python<'_>, resource: RawPythonExtensionModule) -> PyResult<Bound<'_, Self>> {
+        Bound::new(
             py,
             Self {
                 resource: RefCell::new(resource),
