@@ -24,11 +24,11 @@ exactly = 1
 
 [dependencies]
 # Update documentation in lib.rs when new dependencies are added.
-anyhow = "1.0.92"
+anyhow = "1.0.102"
 dunce = "1.0.5"
 jemalloc-sys = { version = "0.5.4", optional = true }
-libc = "0.2.161"
-once_cell = "1.20.2"
+libc = "0.2.186"
+once_cell = "1.21.4"
 serde = { version = "1.0", features = ["derive"], optional = true }
 
 [dependencies.snmalloc-sys]
@@ -51,7 +51,7 @@ path = "../python-oxidized-importer"
 default-features = false
 
 [dependencies.pyo3]
-version = "0.18.3"
+version = "0.29.0"
 default-features = false
 features = ["macros"]
 
@@ -61,7 +61,7 @@ path = "../python-packaging"
 default-features = false
 
 [build-dependencies]
-pyo3-build-config = { version = "0.18.3", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.29.0", features = ["resolve-config"] }
 
 [dev-dependencies]
 pathdiff = "0.2.2"

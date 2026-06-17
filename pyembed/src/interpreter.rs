@@ -4,6 +4,13 @@
 
 //! Manage an embedded Python interpreter.
 
+// Private CPython API not exposed by pyo3-ffi
+// _Py_InitializeMain is not exported on Windows python-build-standalone builds.
+#[cfg(not(windows))]
+extern "C" {
+    fn _Py_InitializeMain() -> pyo3::ffi::PyStatus;
+}
+
 use {
     crate::{
         config::{OxidizedPythonInterpreterConfig, ResolvedOxidizedPythonInterpreterConfig},
@@ -19,7 +26,7 @@ use {
         OXIDIZED_IMPORTER_NAME_STR,
     },
     pyo3::{
-        exceptions::PyRuntimeError, ffi as pyffi, prelude::*, types::PyDict, AsPyPointer,
+        exceptions::PyRuntimeError, ffi as pyffi, prelude::*, types::PyDict,
         PyTypeInfo,
     },
     python_packaging::interpreter::{MultiprocessingStartMethod, TerminfoResolution},
@@ -202,7 +209,12 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
 
         // Enable multi-phase initialization. This allows us to initialize
         // our custom importer before Python attempts any imports.
-        py_config._init_main = 0;
+        // On Windows, _Py_InitializeMain is not exported by some Python builds
+        // (e.g. python-build-standalone), so we use single-phase init.
+        #[cfg(not(windows))]
+        {
+            py_config._init_main = 0;
+        }
 
         let status = unsafe { pyffi::Py_InitializeFromConfig(&py_config) };
         if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
@@ -220,8 +232,8 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // importlib._bootstrap_external. This is where we work our magic to
         // inject our custom importer.
 
-        let oxidized_finder_loaded =
-            unsafe { Python::with_gil_unchecked(|py| self.inject_oxidized_importer(py))? };
+        let py = unsafe { Python::assume_attached() };
+        let oxidized_finder_loaded = self.inject_oxidized_importer(py)?;
 
         // The GIL is still held after calling into PyO3.
         debug_assert_eq!(unsafe { pyffi::PyGILState_Check() }, 1);
@@ -229,12 +241,17 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // Now proceed with the Python main initialization. This will initialize
         // importlib. And if the custom importlib bytecode was registered above,
         // our extension module will get imported and initialized.
-        let status = unsafe { pyffi::_Py_InitializeMain() };
-        if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
-            return Err(NewInterpreterError::new_from_pystatus(
-                &status,
-                "initializing Python main",
-            ));
+        // On Windows, _Py_InitializeMain may not be exported (single-phase init
+        // already completed via Py_InitializeFromConfig above).
+        #[cfg(not(windows))]
+        {
+            let status = unsafe { _Py_InitializeMain() };
+            if unsafe { pyffi::PyStatus_Exception(status) } != 0 {
+                return Err(NewInterpreterError::new_from_pystatus(
+                    &status,
+                    "initializing Python main",
+                ));
+            }
         }
 
         // The GIL is held after finishing initialization.
@@ -306,7 +323,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // there should no longer be a Python interpreter around. So it follows that the
         // importer state cannot be dropped after self.
 
-        replace_meta_path_importers(py, oxidized_importer, resources_state, Some(cb)).map_err(
+        replace_meta_path_importers(py, &oxidized_importer, resources_state, Some(cb)).map_err(
             |err| {
                 NewInterpreterError::new_from_pyerr(py, err, "initialization of oxidized importer")
             },
@@ -351,7 +368,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // _Py_InitializeMain.
 
         if !self.config.filesystem_importer {
-            remove_external_importers(sys_module).map_err(|err| {
+            remove_external_importers(&sys_module).map_err(|err| {
                 NewInterpreterError::new_from_pyerr(py, err, "removing external importers")
             })?;
         }
@@ -359,33 +376,25 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // We aren't able to hold a &PyAny to OxidizedFinder through multi-phase interpreter
         // initialization. So recover an instance now if it is available.
         let oxidized_finder = if oxidized_finder_loaded {
-            sys_module
+            let meta_path = sys_module
                 .getattr("meta_path")
                 .map_err(|err| {
                     NewInterpreterError::new_from_pyerr(py, err, "obtaining sys.meta_path")
-                })?
+                })?;
+            let meta_path_list: Bound<'_, pyo3::types::PyList> = meta_path.cast_into().map_err(|err| {
+                NewInterpreterError::new_from_pyerr(py, err.into(), "casting sys.meta_path to list")
+            })?;
+            meta_path_list
                 .iter()
-                .map_err(|err| {
-                    NewInterpreterError::new_from_pyerr(
-                        py,
-                        err,
-                        "obtaining iterator for sys.meta_path",
-                    )
-                })?
                 .find(|finder| {
-                    // This should never fail.
-                    if let Ok(finder) = finder {
-                        OxidizedFinder::is_type_of(finder)
-                    } else {
-                        false
-                    }
+                    OxidizedFinder::is_type_of(&finder)
                 })
         } else {
             None
         };
 
-        if let Some(Ok(finder)) = oxidized_finder {
-            install_path_hook(finder, sys_module).map_err(|err| {
+        if let Some(finder) = oxidized_finder {
+            install_path_hook(&finder, &sys_module).map_err(|err| {
                 NewInterpreterError::new_from_pyerr(
                     py,
                     err,
@@ -402,7 +411,9 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
                 .map(|x| osstring_to_bytes(py, x.clone()))
                 .collect::<Vec<_>>();
 
-            let args = args_objs.to_object(py);
+            let args = pyo3::types::PyList::new(py, &args_objs).map_err(|e| {
+                NewInterpreterError::new_from_pyerr(py, e, "creating sys.argvb list")
+            })?;
             let argvb = b"argvb\0";
 
             let res =
@@ -417,7 +428,9 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
         // As a convention, sys.oxidized is set to indicate we are running from
         // a self-contained application.
         let oxidized = b"oxidized\0";
-        let py_true = true.into_py(py);
+        let py_true = true.into_pyobject(py).map_err(|e| {
+            NewInterpreterError::new_from_pyerr(py, e.into(), "creating True value")
+        })?;
 
         let res =
             unsafe { pyffi::PySys_SetObject(oxidized.as_ptr() as *const c_char, py_true.as_ptr()) };
@@ -440,7 +453,9 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
 
         if self.config.sys_meipass {
             let meipass = b"_MEIPASS\0";
-            let value = self.config.origin().display().to_string().to_object(py);
+            let value = self.config.origin().display().to_string().into_pyobject(py).map_err(|e| {
+                NewInterpreterError::new_from_pyerr(py, e.into(), "creating sys._MEIPASS value")
+            })?;
 
             match unsafe {
                 pyffi::PySys_SetObject(meipass.as_ptr() as *const c_char, value.as_ptr())
@@ -499,7 +514,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
     where
         F: for<'py> FnOnce(Python<'py>) -> R,
     {
-        Python::with_gil(f)
+        Python::attach(f)
     }
 
     /// Runs `Py_RunMain()` and finalizes the interpreter.
@@ -556,8 +571,8 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
                     .next()
                     .ok_or_else(|| PyRuntimeError::new_err("invalid multiprocessing argument"))?;
 
-                let value = if value == "None" {
-                    py.None()
+                let value: Bound<'_, PyAny> = if value == "None" {
+                    py.None().into_bound(py)
                 } else {
                     let v = value.parse::<isize>().map_err(|e| {
                         PyRuntimeError::new_err(format!(
@@ -566,7 +581,7 @@ impl<'interpreter, 'resources> MainPythonInterpreter<'interpreter, 'resources> {
                         ))
                     })?;
 
-                    v.into_py(py)
+                    v.into_pyobject(py)?.into_any()
                 };
 
                 kwargs.set_item(key, value)?;
@@ -704,7 +719,7 @@ fn write_modules_to_path(py: Python, path: &Path) -> Result<(), &'static str> {
         .map_err(|_| "could not obtain sys.modules")?;
 
     let modules = modules
-        .downcast::<PyDict>()
+        .cast::<PyDict>()
         .map_err(|_| "sys.modules is not a dict")?;
 
     let mut names = BTreeSet::new();

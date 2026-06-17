@@ -126,7 +126,7 @@ pub fn get_interpreter_and_oxidized_finder<'interpreter, 'resources>(
         let resources_bytes = PyBytes::new(py, packed_resources);
         finder.call_method("index_bytes", (resources_bytes,), None)?;
 
-        let finder = finder.into_py(py);
+        let finder = finder.unbind();
 
         Ok(finder)
     })?;

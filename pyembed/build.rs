@@ -3,6 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 fn main() {
+    // Emit PyO3 cfg flags like Py_3_11, Py_3_12, etc.
+    // This is required for conditional compilation based on Python version.
+    pyo3_build_config::use_pyo3_cfgs();
+
     // We're always able to derive this. So always set it, even though it is likely
     // only used by test mode.
     println!(

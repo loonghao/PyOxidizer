@@ -1,5 +1,7 @@
-# Debian Jessie.
-FROM debian@sha256:32ad5050caffb2c7e969dac873bce2c370015c2256ff984b70c1c08b3a2816a0
+# Debian Bookworm (stable).
+# Used to produce a portable Linux binary of PyOxidizer via a containerized build
+# with a pinned toolchain. The resulting binary is statically linked against musl.
+FROM debian:bookworm-slim
 MAINTAINER Gregory Szorc <gregory.szorc@gmail.com>
 
 RUN groupadd -g 1000 build && \
@@ -17,18 +19,13 @@ ENV HOME=/build \
 CMD ["/bin/bash", "--login"]
 WORKDIR '/build'
 
-RUN for s in debian_jessie debian_jessie-updates debian-security_jessie/updates; do \
-      echo "deb http://snapshot.debian.org/archive/${s%_*}/20220429T205342Z/ ${s#*_} main"; \
-    done > /etc/apt/sources.list && \
-    ( echo 'quiet "true";'; \
+RUN ( echo 'quiet "true";'; \
       echo 'APT::Get::Assume-Yes "true";'; \
       echo 'APT::Install-Recommends "false";'; \
-      echo 'Acquire::Check-Valid-Until "false";'; \
       echo 'Acquire::Retries "5";'; \
     ) > /etc/apt/apt.conf.d/99builder
 
-RUN apt-get update
-RUN apt-get install --force-yes \
+RUN apt-get update && apt-get install --no-install-recommends \
   ca-certificates \
   curl \
   file \
@@ -38,38 +35,16 @@ RUN apt-get install --force-yes \
   musl-tools \
   xz-utils
 
-# We use `curl --insecure` throughout this file. This is reasonably safe since
-# we validate the SHA-256 of all downloaded files to prevent tampering.
-
-# The binutils is Jessie is too old to link the python-build-standalone distributions
-# due to a R_X86_64_REX_GOTPCRELX relocation. So install a newer binutils.
-RUN curl --insecure https://ftp.gnu.org/gnu/binutils/binutils-2.36.1.tar.xz > binutils.tar.xz && \
-  echo 'e81d9edf373f193af428a0f256674aea62a9d74dfe93f65192d4eae030b0f3b0  binutils.tar.xz' | sha256sum -c - && \
-  tar -xf binutils.tar.xz && \
-  rm binutils.tar.xz && \
-  mkdir binutils-objdir && \
-  cd binutils-objdir && \
-  ../binutils-2.36.1/configure \
-    --build=x86_64-unknown-linux-gnu \
-    --prefix=/usr/local \
-    --enable-plugins \
-    --disable-nls \
-    --with-sysroot=/ && \
-  make -j `nproc` && \
-  make install -j `nproc` && \
-  cd .. && \
-  rm -rf binutils-objdir
-
 USER build
 
-RUN curl --insecure https://raw.githubusercontent.com/rust-lang/rustup/ce5817a94ac372804babe32626ba7fd2d5e1b6ac/rustup-init.sh > rustup-init.sh && \
-  echo 'a3cb081f88a6789d104518b30d4aa410009cd08c3822a1226991d6cf0442a0f8  rustup-init.sh' | sha256sum -c - && \
+# Install Rust toolchain via rustup.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup-init.sh && \
   chmod +x rustup-init.sh && \
-  ./rustup-init.sh -y --default-toolchain 1.82.0 --profile minimal && \
+  ./rustup-init.sh -y --default-toolchain 1.85.0 --profile minimal && \
   ~/.cargo/bin/rustup target add x86_64-unknown-linux-musl
 
-RUN curl --insecure -L https://github.com/indygreg/python-build-standalone/releases/download/20220502/cpython-3.9.12+20220502-x86_64-unknown-linux-gnu-install_only.tar.gz > python.tar.gz && \
-  echo 'ccca12f698b3b810d79c52f007078f520d588232a36bc12ede944ec3ea417816  python.tar.gz' | sha256sum -c - && \
+# Install a recent Python for build-time scripting.
+RUN curl -L https://github.com/indygreg/python-build-standalone/releases/download/20260602/cpython-3.11.15+20260602-x86_64-unknown-linux-gnu-install_only.tar.gz > python.tar.gz && \
   tar -xf python.tar.gz && \
   rm python.tar.gz && \
   echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc

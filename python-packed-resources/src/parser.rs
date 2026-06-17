@@ -87,8 +87,13 @@ impl<'a> ResourceParserIterator<'a> {
     #[cfg(windows)]
     fn resolve_path(&mut self, resource_field: ResourceField, length: usize) -> Cow<'a, Path> {
         let raw = self.resolve_blob_data(resource_field, length);
-        let raw = unsafe { std::slice::from_raw_parts(raw.as_ptr() as *const u16, raw.len() / 2) };
-
+        // Guard against odd-length or empty blobs that would violate
+        // slice::from_raw_parts preconditions.
+        let wide_len = raw.len() / 2;
+        if wide_len == 0 || raw.len() % 2 != 0 {
+            return Cow::Owned(PathBuf::new());
+        }
+        let raw = unsafe { std::slice::from_raw_parts(raw.as_ptr() as *const u16, wide_len) };
         // There isn't an API that lets us get a OsStr from &[u16]. So we need to use
         // owned types.
         let path_string = OsString::from_wide(raw);

@@ -104,6 +104,7 @@ pub static NO_BYTECODE_MODULES: Lazy<Vec<&'static str>> = Lazy::new(|| {
         "test.badsyntax_future8",
         "test.badsyntax_future9",
         "test.badsyntax_future10",
+        "test.test_future_stmt.badsyntax_future10",
         "test.badsyntax_pep3120",
     ]
 });
@@ -236,9 +237,9 @@ fn parse_python_json(path: &Path) -> Result<PythonJsonMain> {
                 .as_str()
                 .ok_or_else(|| anyhow!("unable to parse version as a string"))?;
 
-            if version != "7" {
+            if version != "7" && version != "8" {
                 return Err(anyhow!(
-                    "expected version 7 standalone distribution; found version {}",
+                    "expected version 7 or 8 standalone distribution; found version {}",
                     version
                 ));
             }
@@ -837,10 +838,18 @@ impl StandaloneDistribution {
                 if let Some(license_paths) = &entry.license_paths {
                     for path in license_paths {
                         let path = python_path.join(path);
-                        let text = std::fs::read_to_string(&path)
-                            .with_context(|| format!("reading {}", path.display()))?;
-
-                        license.add_license_text(text);
+                        match std::fs::read_to_string(&path) {
+                            Ok(text) => {
+                                license.add_license_text(text);
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "unable to read extension license file {}: {}",
+                                    path.display(),
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -1491,19 +1500,8 @@ pub mod tests {
                 .cloned()
                 .collect::<Vec<_>>();
 
-            // 3.10 distributions stopped shipping GPL licensed extensions.
-            let (linux_dropped, linux_added) =
-                if ["3.8", "3.9"].contains(&dist.python_major_minor_version().as_str()) {
-                    (
-                        vec![
-                            ("_gdbm".to_string(), Some("default".to_string())),
-                            ("readline".to_string(), Some("default".to_string())),
-                        ],
-                        vec![("readline".to_string(), Some("libedit".to_string()))],
-                    )
-                } else {
-                    (vec![], vec![])
-                };
+            // 3.10+ distributions stopped shipping GPL licensed extensions.
+            let (linux_dropped, linux_added) = (vec![], vec![]);
 
             let (wanted_dropped, wanted_added) = match (
                 dist.python_major_minor_version().as_str(),
